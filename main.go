@@ -417,6 +417,7 @@ type opts struct {
 	port   string
 	name   string
 	type_  string
+	short  bool
 }
 
 func getOpts() (*opts, error) {
@@ -430,6 +431,13 @@ func getOpts() (*opts, error) {
 		} else if strings.Index(os.Args[i], "-p") == 0 {
 			i++
 			opts.port = os.Args[i]
+		} else if strings.Index(os.Args[i], "+") == 0 {
+			switch os.Args[i] {
+			case "+short":
+				opts.short = true
+			default:
+				return nil, fmt.Errorf("invalid arg: %v", os.Args[i])
+			}
 		} else if len(opts.name) == 0 {
 			opts.name = strings.ToLower(os.Args[i])
 		} else {
@@ -442,30 +450,36 @@ func getOpts() (*opts, error) {
 	return opts, nil
 }
 
-func print(res *response) {
-	fmt.Print(res.header.string())
-
-	fmt.Println(";; QUESTION SECTION:")
-	fmt.Printf(";%v\n", res.question.string())
-
-	if 0 < len(res.answerResourceRecords) {
-		fmt.Println(";; ANSWER SECTION:")
+func print(res *response, opts *opts) {
+	if opts.short {
 		for i := 0; i < len(res.answerResourceRecords); i++ {
-			fmt.Println(res.answerResourceRecords[i].string())
+			fmt.Println(res.answerResourceRecords[i].val)
 		}
-	}
+	} else {
+		fmt.Print(res.header.string())
 
-	if 0 < len(res.authorityResourceRecords) {
-		fmt.Println(";; AUTHORITY SECTION:")
-		for i := 0; i < len(res.authorityResourceRecords); i++ {
-			fmt.Println(res.authorityResourceRecords[i].string())
+		fmt.Println(";; QUESTION SECTION:")
+		fmt.Printf(";%v\n", res.question.string())
+
+		if 0 < len(res.answerResourceRecords) {
+			fmt.Println(";; ANSWER SECTION:")
+			for i := 0; i < len(res.answerResourceRecords); i++ {
+				fmt.Println(res.answerResourceRecords[i].string())
+			}
 		}
-	}
 
-	if 0 < len(res.additionalResourceRecords) {
-		fmt.Println(";; ADDITIONAL SECTION:")
-		for i := 0; i < len(res.additionalResourceRecords); i++ {
-			fmt.Println(res.additionalResourceRecords[i].string())
+		if 0 < len(res.authorityResourceRecords) {
+			fmt.Println(";; AUTHORITY SECTION:")
+			for i := 0; i < len(res.authorityResourceRecords); i++ {
+				fmt.Println(res.authorityResourceRecords[i].string())
+			}
+		}
+
+		if 0 < len(res.additionalResourceRecords) {
+			fmt.Println(";; ADDITIONAL SECTION:")
+			for i := 0; i < len(res.additionalResourceRecords); i++ {
+				fmt.Println(res.additionalResourceRecords[i].string())
+			}
 		}
 	}
 }
@@ -494,5 +508,5 @@ func main() {
 	if err != nil {
 		die(err)
 	}
-	print(res)
+	print(res, opts)
 }
