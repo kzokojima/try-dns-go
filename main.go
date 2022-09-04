@@ -193,6 +193,7 @@ var typeOf = map[string]uint16{
 	"MX":    15,
 	"TXT":   16,
 	"AAAA":  28,
+	"OPT":   41,
 }
 var typeNameOf = map[uint16]string{
 	1:  "A",
@@ -201,6 +202,7 @@ var typeNameOf = map[uint16]string{
 	15: "MX",
 	16: "TXT",
 	28: "AAAA",
+	41: "OPT",
 }
 
 var classOf = map[string]uint16{
@@ -287,48 +289,79 @@ func parseResourceRecord(data []byte, offset int) (*resourceRecord, int, error) 
 		ttl      uint32
 		rdlength uint16
 		val      string
+		err      error
 	)
 
-	question, offset, err := parseQuestionSection(data, offset)
-	if err != nil {
-		goto Error
-	}
-
-	// ttl
-	ttl = binary.BigEndian.Uint32(data[offset:])
-	offset += 4
-
-	// rdlength
-	rdlength = binary.BigEndian.Uint16(data[offset:])
-	offset += 2
-
-	// rddata
-	if (question.type_ == "A" && rdlength == 4) || (question.type_ == "AAAA" && rdlength == 16) {
-		ip, _ := netip.AddrFromSlice(data[offset : offset+int(rdlength)])
-		val = ip.String()
-	} else if question.type_ == "NS" || question.type_ == "CNAME" {
-		name, _, err := decodeName(data, offset)
+	if data[offset] != 0 {
+		question, offset, err := parseQuestionSection(data, offset)
 		if err != nil {
 			goto Error
 		}
-		val = name
-	} else if question.type_ == "MX" {
-		preference := binary.BigEndian.Uint16(data[offset:])
-		exchange, _, err := decodeName(data, offset+2)
-		if err != nil {
+
+		// ttl
+		ttl = binary.BigEndian.Uint32(data[offset:])
+		offset += 4
+
+		// rdlength
+		rdlength = binary.BigEndian.Uint16(data[offset:])
+		offset += 2
+
+		// rddata
+		if (question.type_ == "A" && rdlength == 4) || (question.type_ == "AAAA" && rdlength == 16) {
+			ip, _ := netip.AddrFromSlice(data[offset : offset+int(rdlength)])
+			val = ip.String()
+		} else if question.type_ == "NS" || question.type_ == "CNAME" {
+			name, _, err := decodeName(data, offset)
+			if err != nil {
+				goto Error
+			}
+			val = name
+		} else if question.type_ == "MX" {
+			preference := binary.BigEndian.Uint16(data[offset:])
+			exchange, _, err := decodeName(data, offset+2)
+			if err != nil {
+				goto Error
+			}
+			val = fmt.Sprintf("%v %v", preference, exchange)
+		} else if question.type_ == "TXT" {
+			txtlen := int(data[offset])
+			txt := string(data[offset+1 : offset+1+txtlen])
+			val = fmt.Sprintf("%q", txt)
+		} else {
+			val = fmt.Sprintf("unknown type: %v, rdlength: %v", question.type_, rdlength)
+		}
+		offset += int(rdlength)
+
+		return &resourceRecord{
+			question.name,
+			question.type_,
+			question.class,
+			ttl,
+			val,
+		}, offset, nil
+	} else { // OPT
+		opt := optResourceRecord{}
+
+		opt.type_ = binary.BigEndian.Uint16(data[offset+1:])
+		opt.class = binary.BigEndian.Uint16(data[offset+3:])
+		opt.ttl = binary.BigEndian.Uint32(data[offset+5:])
+		opt.rdlen = binary.BigEndian.Uint16(data[offset+9:])
+
+		if opt.type_ != 41 {
+			err = fmt.Errorf("invalid opt type: %v", opt.type_)
 			goto Error
 		}
-		val = fmt.Sprintf("%v %v", preference, exchange)
-	} else if question.type_ == "TXT" {
-		txtlen := int(data[offset])
-		txt := string(data[offset+1 : offset+1+txtlen])
-		val = fmt.Sprintf("%q", txt)
-	} else {
-		val = fmt.Sprintf("unknown type: %v, rdlength: %v", question.type_, rdlength)
-	}
-	offset += int(rdlength)
 
-	return &resourceRecord{question.name, question.type_, question.class, ttl, val}, offset, nil
+		offset += OPT_RESOURCE_RECORD_HEADER_SIZE
+
+		return &resourceRecord{
+			"",
+			"OPT",
+			fmt.Sprint(opt.class),
+			opt.ttl,
+			"",
+		}, offset, nil
+	}
 
 Error:
 	return nil, 0, err
@@ -336,6 +369,26 @@ Error:
 
 func (rr *resourceRecord) string() string {
 	return fmt.Sprintf("%v %v %v %v %v", rr.name, rr.ttl, rr.class, rr.type_, rr.val)
+}
+
+type optResourceRecord struct {
+	name  byte
+	type_ uint16
+	class uint16
+	ttl   uint32
+	rdlen uint16
+}
+
+const OPT_RESOURCE_RECORD_HEADER_SIZE = 11
+
+func (opt *optResourceRecord) bytes() []byte {
+	bytes := make([]byte, OPT_RESOURCE_RECORD_HEADER_SIZE)
+	bytes[0] = opt.name
+	binary.BigEndian.PutUint16(bytes[1:], opt.type_)
+	binary.BigEndian.PutUint16(bytes[3:], opt.class)
+	binary.BigEndian.PutUint32(bytes[5:], opt.ttl)
+	binary.BigEndian.PutUint16(bytes[9:], opt.rdlen)
+	return bytes
 }
 
 type response struct {
@@ -391,12 +444,25 @@ func makeReqMsg(name string, type_ string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	header := makeQueryHeader()
+	header.arCount = 1
+	opt := optResourceRecord{
+		type_: 41,
+		class: 1500, // UDP payload size
+	}
 
-	return append(makeQueryHeader().bytes(), questionBytes...), nil
+	bytes := []byte{}
+	bytes = append(bytes, header.bytes()...)
+	bytes = append(bytes, questionBytes...)
+	bytes = append(bytes, opt.bytes()...)
+
+	return bytes, nil
 }
 
+const UDP_SIZE = 1500
+
 func request(network string, address string, data []byte) ([]byte, error) {
-	var buf [512]byte
+	var buf [UDP_SIZE]byte
 	conn, err := net.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -478,10 +544,16 @@ func print(res *response, opts *opts) {
 			}
 		}
 
-		if 0 < len(res.additionalResourceRecords) {
+		arrs := make([]string, 0, len(res.additionalResourceRecords))
+		for i := 0; i < len(res.additionalResourceRecords); i++ {
+			if res.additionalResourceRecords[i].type_ != "OPT" {
+				arrs = append(arrs, res.additionalResourceRecords[i].string())
+			}
+		}
+		if 0 < len(arrs) {
 			fmt.Println(";; ADDITIONAL SECTION:")
-			for i := 0; i < len(res.additionalResourceRecords); i++ {
-				fmt.Println(res.additionalResourceRecords[i].string())
+			for i := 0; i < len(arrs); i++ {
+				fmt.Println(arrs[i])
 			}
 		}
 	}

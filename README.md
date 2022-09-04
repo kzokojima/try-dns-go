@@ -49,6 +49,7 @@ $ go run . @127.0.0.1 -p 8053 example.com
 ## References
 
 * https://www.rfc-editor.org/info/rfc1034
+* https://www.rfc-editor.org/info/rfc6891
 * https://www.rfc-editor.org/info/rfc1035
 * https://jprs.jp/tech/index.html#dns-rfc-info
 * https://atmarkit.itmedia.co.jp/ait/articles/1601/29/news014.html
