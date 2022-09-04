@@ -420,28 +420,31 @@ type opts struct {
 	short  bool
 }
 
-func getOpts() (*opts, error) {
+func getOpts(args []string) (*opts, error) {
 	var opts = &opts{
 		port:  "53",
 		type_: "A",
 	}
-	for i := 1; i < len(os.Args); i++ {
-		if strings.Index(os.Args[i], "@") == 0 {
-			opts.server = strings.TrimLeft(os.Args[i], "@")
-		} else if strings.Index(os.Args[i], "-p") == 0 {
+	for i := 0; i < len(args); i++ {
+		switch {
+		case strings.HasPrefix(args[i], "@"):
+			opts.server = args[i][1:]
+		case args[i] == "-p":
 			i++
-			opts.port = os.Args[i]
-		} else if strings.Index(os.Args[i], "+") == 0 {
-			switch os.Args[i] {
+			opts.port = args[i]
+		case strings.HasPrefix(args[i], "-p"):
+			opts.port = args[i][2:]
+		case strings.HasPrefix(args[i], "+"):
+			switch args[i] {
 			case "+short":
 				opts.short = true
 			default:
-				return nil, fmt.Errorf("invalid arg: %v", os.Args[i])
+				return nil, fmt.Errorf("invalid arg: %v", args[i])
 			}
-		} else if len(opts.name) == 0 {
-			opts.name = strings.ToLower(os.Args[i])
-		} else {
-			opts.type_ = strings.ToUpper(os.Args[i])
+		case len(opts.name) == 0:
+			opts.name = strings.ToLower(args[i])
+		default:
+			opts.type_ = strings.ToUpper(args[i])
 		}
 	}
 	if len(opts.server) == 0 || len(opts.port) == 0 || len(opts.name) == 0 || len(opts.type_) == 0 {
@@ -492,7 +495,7 @@ func die(err error) {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	opts, err := getOpts()
+	opts, err := getOpts(os.Args[1:])
 	if err != nil {
 		die(err)
 	}
