@@ -100,33 +100,41 @@ func (h *header) bytes() []byte {
 }
 
 func (h *header) string() string {
-	return fmt.Sprintf(`;ID:      %v
-;QR:      %v
-;OPCODE:  %v
-;AA:      %v
-;TC:      %v
-;RD:      %v
-;RA:      %v
-;Z:       %v
-;AD:      %v
-;CD:      %v
-;RCODE:   %v
-;QDCOUNT: %v
-;ANCOUNT: %v
-;NSCOUNT: %v
-;ARCOUNT: %v
-`,
+	opcodeText := []string{"QUERY", "IQUERY", "STATUS"}
+	statusText := []string{"NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP", "REFUSED"}
+
+	flags := make([]string, 0, 8)
+	if h.qr() != 0 {
+		flags = append(flags, "qr")
+	}
+	if h.aa() != 0 {
+		flags = append(flags, "aa")
+	}
+	if h.tc() != 0 {
+		flags = append(flags, "tc")
+	}
+	if h.rd() != 0 {
+		flags = append(flags, "rd")
+	}
+	if h.ra() != 0 {
+		flags = append(flags, "ra")
+	}
+	if h.z() != 0 {
+		flags = append(flags, "z")
+	}
+	if h.ad() != 0 {
+		flags = append(flags, "ad")
+	}
+	if h.cd() != 0 {
+		flags = append(flags, "cd")
+	}
+
+	return fmt.Sprintf(";; ->>HEADER<<- opcode: %v, status: %v, id: %v\n"+
+		";; flags: %v; QUERY: %v, ANSWER: %v, AUTHORITY: %v, ADDITIONAL: %v\n",
+		opcodeText[h.opcode()],
+		statusText[h.rcode()],
 		h.id,
-		h.qr(),
-		h.opcode(),
-		h.aa(),
-		h.tc(),
-		h.rd(),
-		h.ra(),
-		h.z(),
-		h.ad(),
-		h.cd(),
-		h.rcode(),
+		strings.Join(flags, " "),
 		h.qdCount,
 		h.anCount,
 		h.nsCount,
@@ -528,13 +536,14 @@ func print(res *response, opts *opts) {
 		fmt.Print(res.header.string())
 
 		fmt.Println(";; QUESTION SECTION:")
-		fmt.Printf(";%v\n", res.question.string())
+		fmt.Printf(";%v\n\n", res.question.string())
 
 		if 0 < len(res.answerResourceRecords) {
 			fmt.Println(";; ANSWER SECTION:")
 			for i := 0; i < len(res.answerResourceRecords); i++ {
 				fmt.Println(res.answerResourceRecords[i].string())
 			}
+			fmt.Println()
 		}
 
 		if 0 < len(res.authorityResourceRecords) {
@@ -542,6 +551,7 @@ func print(res *response, opts *opts) {
 			for i := 0; i < len(res.authorityResourceRecords); i++ {
 				fmt.Println(res.authorityResourceRecords[i].string())
 			}
+			fmt.Println()
 		}
 
 		arrs := make([]string, 0, len(res.additionalResourceRecords))
@@ -555,6 +565,7 @@ func print(res *response, opts *opts) {
 			for i := 0; i < len(arrs); i++ {
 				fmt.Println(arrs[i])
 			}
+			fmt.Println()
 		}
 	}
 }
