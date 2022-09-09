@@ -23,7 +23,7 @@ type header struct {
 
 const HEADER_SIZE = 12
 
-func makeQueryHeader() *header {
+func newQueryHeader() *header {
 	h := &header{}
 	h.id = uint16(rand.Intn(0x10000))
 	h.fields = 1 << 8 // RD
@@ -99,9 +99,9 @@ func (h *header) bytes() []byte {
 	return bytes
 }
 
-func (h *header) string() string {
-	opcodeText := []string{"QUERY", "IQUERY", "STATUS"}
-	statusText := []string{"NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP", "REFUSED"}
+func (h header) String() string {
+	opcodeTexts := []string{"QUERY", "IQUERY", "STATUS"}
+	statusTexts := []string{"NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP", "REFUSED"}
 
 	flags := make([]string, 0, 8)
 	if h.qr() != 0 {
@@ -131,8 +131,8 @@ func (h *header) string() string {
 
 	return fmt.Sprintf(";; ->>HEADER<<- opcode: %v, status: %v, id: %v\n"+
 		";; flags: %v; QUERY: %v, ANSWER: %v, AUTHORITY: %v, ADDITIONAL: %v\n",
-		opcodeText[h.opcode()],
-		statusText[h.rcode()],
+		opcodeTexts[h.opcode()],
+		statusTexts[h.rcode()],
 		h.id,
 		strings.Join(flags, " "),
 		h.qdCount,
@@ -141,15 +141,26 @@ func (h *header) string() string {
 		h.arCount)
 }
 
-func encodeName(in string) ([]byte, error) {
-	if 253 < len(in) {
+const (
+	LABEL_LEN_MAX       = 63
+	DOMAIN_NAME_LEN_MAX = 253
+)
+
+type name string
+
+func (n name) String() string {
+	return string(n)
+}
+
+func encodeName(in name) ([]byte, error) {
+	if DOMAIN_NAME_LEN_MAX < len(in) {
 		return nil, fmt.Errorf("%s length", in)
 	}
 	buf := new(bytes.Buffer)
-	labels := strings.Split(in, ".")
+	labels := strings.Split(string(in), ".")
 	for _, label := range labels {
 		len := len(label)
-		if 63 < len {
+		if LABEL_LEN_MAX < len {
 			return nil, fmt.Errorf("%s length", label)
 		}
 		buf.WriteByte(byte(len))
@@ -159,9 +170,9 @@ func encodeName(in string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func decodeName(data []byte, offset int) (string, int, error) {
+func decodeName(data []byte, current int) (field, int, error) {
 	buf := new(bytes.Buffer)
-	i := offset
+	i := current
 	for {
 		len := int(data[i])
 		if len == 0 {
@@ -171,7 +182,7 @@ func decodeName(data []byte, offset int) (string, int, error) {
 			i = int(data[i+1])
 			continue
 		} else if len&0xC0 != 0 {
-			return "", 0, fmt.Errorf("label length")
+			return name(""), 0, fmt.Errorf("label length")
 		}
 		if buf.Len() != 0 {
 			buf.WriteString(".")
@@ -181,20 +192,20 @@ func decodeName(data []byte, offset int) (string, int, error) {
 		i += len
 	}
 	buf.WriteString(".")
-	new_offset := i
-	if i < offset {
-		new_offset = offset + 2
+	next := i
+	if i < current {
+		next = current + 2
 	}
-	return buf.String(), new_offset, nil
+	return name(buf.String()), next, nil
 }
 
 type question struct {
-	name  string
-	type_ string
-	class string
+	name  name
+	type_ type_
+	class class
 }
 
-var typeOf = map[string]uint16{
+var typeOf = map[string]type_{
 	"A":     1,
 	"NS":    2,
 	"CNAME": 5,
@@ -203,7 +214,7 @@ var typeOf = map[string]uint16{
 	"AAAA":  28,
 	"OPT":   41,
 }
-var typeNameOf = map[uint16]string{
+var typeTextOf = map[type_]string{
 	1:  "A",
 	2:  "NS",
 	5:  "CNAME",
@@ -213,49 +224,81 @@ var typeNameOf = map[uint16]string{
 	41: "OPT",
 }
 
-var classOf = map[string]uint16{
+var classOf = map[string]class{
 	"IN": 1,
 }
 
-var classNameOf = map[uint16]string{
+var classTextOf = map[class]string{
 	1: "IN",
 }
 
-func parseQuestionSection(data []byte, offset int) (*question, int, error) {
-	var (
-		ok        bool
-		type_     string
-		type_val  uint16
-		class     string
-		class_val uint16
-	)
+type field interface {
+	String() string
+}
 
-	// name
-	name, offset, err := decodeName(data, offset)
-	if err != nil {
-		goto Error
+type reader func(data []byte, current int) (field, int, error)
+
+func readFields(data []byte, current int, readers ...reader) ([]field, int, error) {
+	fields := make([]field, 0, len(readers))
+	for _, reader := range readers {
+		var (
+			field field
+			err   error
+		)
+		field, current, err = reader(data, current)
+		if err != nil {
+			return nil, 0, err
+		}
+		fields = append(fields, field)
 	}
+	return fields, current, nil
+}
 
-	// type
-	type_val = binary.BigEndian.Uint16(data[offset:])
-	type_, ok = typeNameOf[type_val]
-	if !ok {
-		err = fmt.Errorf("invalid type: %v", type_val)
-		goto Error
+type type_ uint16
+
+func (t type_) String() string {
+	return typeTextOf[t]
+}
+
+func readType(data []byte, current int) (field, int, error) {
+	type_ := type_(binary.BigEndian.Uint16(data[current:]))
+	if _, ok := typeTextOf[type_]; ok {
+		return type_, current + 2, nil
 	}
+	return type_, 0, fmt.Errorf("invalid type: %v", type_)
+}
 
-	// class
-	class_val = binary.BigEndian.Uint16(data[offset+2:])
-	class, ok = classNameOf[class_val]
-	if !ok {
-		err = fmt.Errorf("invalid class: %v", class_val)
-		goto Error
-	}
+type class uint16
 
-	return &question{name, type_, class}, offset + 4, nil
+func (c class) String() string {
+	return classTextOf[c]
+}
 
-Error:
-	return nil, 0, err
+func readClass(data []byte, current int) (field, int, error) {
+	class := class(binary.BigEndian.Uint16(data[current:]))
+	return class, current + 2, nil
+}
+
+type ttl uint16
+
+func (t ttl) String() string {
+	return fmt.Sprint(uint16(t))
+}
+
+func readTtl(data []byte, current int) (field, int, error) {
+	ttl := ttl(binary.BigEndian.Uint32(data[current:]))
+	return ttl, current + 4, nil
+}
+
+type rdlength uint16
+
+func (l rdlength) String() string {
+	return fmt.Sprint(uint16(l))
+}
+
+func readRdlength(data []byte, current int) (field, int, error) {
+	rdlength := rdlength(binary.BigEndian.Uint16(data[current:]))
+	return rdlength, current + 2, nil
 }
 
 func (q *question) bytes() ([]byte, error) {
@@ -263,119 +306,101 @@ func (q *question) bytes() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	type_val, ok := typeOf[q.type_]
-	if !ok {
-		return nil, fmt.Errorf("invalid type: %s", q.type_)
-	}
-	class_val, ok := classOf[q.class]
-	if !ok {
-		return nil, fmt.Errorf("invalid class: %s", q.class)
-	}
 
 	len := len(encoded)
 	bytes := make([]byte, len+4)
 	copy(bytes, encoded)
-	binary.BigEndian.PutUint16(bytes[len:], type_val)
-	binary.BigEndian.PutUint16(bytes[len+2:], class_val)
+	binary.BigEndian.PutUint16(bytes[len:], uint16(q.type_))
+	binary.BigEndian.PutUint16(bytes[len+2:], uint16(q.class))
 	return bytes, nil
 }
 
-func (q *question) string() string {
+func (q question) String() string {
 	return fmt.Sprintf("%v %v %v", q.name, q.class, q.type_)
 }
 
 type resourceRecord struct {
-	name  string
-	type_ string
-	class string
-	ttl   uint32
+	name  name
+	type_ type_
+	class class
+	ttl   ttl
 	val   string
 }
 
-func parseResourceRecord(data []byte, offset int) (*resourceRecord, int, error) {
+func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error) {
 	var (
-		ttl      uint32
-		rdlength uint16
-		val      string
-		err      error
+		val string
+		err error
 	)
 
-	if data[offset] != 0 {
-		question, offset, err := parseQuestionSection(data, offset)
+	if data[current] != 0 {
+		fields, current, err := readFields(data, current, decodeName, readType, readClass, readTtl, readRdlength)
 		if err != nil {
 			goto Error
 		}
-
-		// ttl
-		ttl = binary.BigEndian.Uint32(data[offset:])
-		offset += 4
-
-		// rdlength
-		rdlength = binary.BigEndian.Uint16(data[offset:])
-		offset += 2
+		name := fields[0].(name)
+		type_ := fields[1].(type_)
+		class := fields[2].(class)
+		ttl := fields[3].(ttl)
+		rdlength := fields[4].(rdlength)
 
 		// rddata
-		if (question.type_ == "A" && rdlength == 4) || (question.type_ == "AAAA" && rdlength == 16) {
-			ip, _ := netip.AddrFromSlice(data[offset : offset+int(rdlength)])
+		switch type_ := type_.String(); true {
+		case (type_ == "A" && rdlength == 4) || (type_ == "AAAA" && rdlength == 16):
+			ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
 			val = ip.String()
-		} else if question.type_ == "NS" || question.type_ == "CNAME" {
-			name, _, err := decodeName(data, offset)
+		case type_ == "NS" || type_ == "CNAME":
+			decoded, _, err := decodeName(data, current)
 			if err != nil {
 				goto Error
 			}
-			val = name
-		} else if question.type_ == "MX" {
-			preference := binary.BigEndian.Uint16(data[offset:])
-			exchange, _, err := decodeName(data, offset+2)
+			val = decoded.String()
+		case type_ == "MX":
+			preference := binary.BigEndian.Uint16(data[current:])
+			exchange, _, err := decodeName(data, current+2)
 			if err != nil {
 				goto Error
 			}
 			val = fmt.Sprintf("%v %v", preference, exchange)
-		} else if question.type_ == "TXT" {
-			txtlen := int(data[offset])
-			txt := string(data[offset+1 : offset+1+txtlen])
+		case type_ == "TXT":
+			txtlen := int(data[current])
+			txt := string(data[current+1 : current+1+txtlen])
 			val = fmt.Sprintf("%q", txt)
-		} else {
-			val = fmt.Sprintf("unknown type: %v, rdlength: %v", question.type_, rdlength)
+		default:
+			val = fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength)
 		}
-		offset += int(rdlength)
+		current += int(rdlength)
 
 		return &resourceRecord{
-			question.name,
-			question.type_,
-			question.class,
+			name,
+			type_,
+			class,
 			ttl,
 			val,
-		}, offset, nil
+		}, current, nil
 	} else { // OPT
-		opt := optResourceRecord{}
-
-		opt.type_ = binary.BigEndian.Uint16(data[offset+1:])
-		opt.class = binary.BigEndian.Uint16(data[offset+3:])
-		opt.ttl = binary.BigEndian.Uint32(data[offset+5:])
-		opt.rdlen = binary.BigEndian.Uint16(data[offset+9:])
-
-		if opt.type_ != 41 {
-			err = fmt.Errorf("invalid opt type: %v", opt.type_)
-			goto Error
+		fields, _, err := readFields(data, current+1, readType, readClass, readTtl, readRdlength)
+		if err != nil {
+			return nil, 0, err
 		}
-
-		offset += OPT_RESOURCE_RECORD_HEADER_SIZE
+		type_ := fields[0].(type_)
+		class := fields[1].(class)
+		ttl := fields[2].(ttl)
 
 		return &resourceRecord{
+			name(""),
+			type_,
+			class,
+			ttl,
 			"",
-			"OPT",
-			fmt.Sprint(opt.class),
-			opt.ttl,
-			"",
-		}, offset, nil
+		}, current + OPT_RESOURCE_RECORD_HEADER_SIZE, nil
 	}
 
 Error:
 	return nil, 0, err
 }
 
-func (rr *resourceRecord) string() string {
+func (rr resourceRecord) String() string {
 	return fmt.Sprintf("%v %v %v %v %v", rr.name, rr.ttl, rr.class, rr.type_, rr.val)
 }
 
@@ -420,7 +445,7 @@ func parseResMsg(data []byte) (*response, error) {
 	}
 
 	// Question section
-	question, offset, err := parseQuestionSection(data, HEADER_SIZE)
+	fields, current, err := readFields(data, HEADER_SIZE, decodeName, readType, readClass)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +454,7 @@ func parseResMsg(data []byte) (*response, error) {
 	records := make([]resourceRecord, header.resourceRecordCount())
 	for i := 0; i < header.resourceRecordCount(); i++ {
 		var record *resourceRecord
-		record, offset, err = parseResourceRecord(data, offset)
+		record, current, err = parseResourceRecord(data, current)
 		if err != nil {
 			return nil, err
 		}
@@ -438,25 +463,27 @@ func parseResMsg(data []byte) (*response, error) {
 
 	return &response{
 		*header,
-		*question,
+		question{fields[0].(name), fields[1].(type_), fields[2].(class)},
 		records[:header.anCount],
 		records[header.anCount : header.anCount+header.nsCount],
 		records[header.anCount+header.nsCount : header.anCount+header.nsCount+header.arCount],
-		offset,
+		current,
 	}, nil
 }
 
-func makeReqMsg(name string, type_ string) ([]byte, error) {
-	question := question{name, type_, "IN"}
+const UDP_SIZE = 1500
+
+func makeReqMsg(n string, t string) ([]byte, error) {
+	question := question{name(n), typeOf[t], classOf["IN"]}
 	questionBytes, err := question.bytes()
 	if err != nil {
 		return nil, err
 	}
-	header := makeQueryHeader()
+	header := newQueryHeader()
 	header.arCount = 1
 	opt := optResourceRecord{
 		type_: 41,
-		class: 1500, // UDP payload size
+		class: UDP_SIZE, // UDP payload size
 	}
 
 	bytes := []byte{}
@@ -466,8 +493,6 @@ func makeReqMsg(name string, type_ string) ([]byte, error) {
 
 	return bytes, nil
 }
-
-const UDP_SIZE = 1500
 
 func request(network string, address string, data []byte) ([]byte, error) {
 	var buf [UDP_SIZE]byte
@@ -533,15 +558,15 @@ func print(res *response, opts *opts) {
 			fmt.Println(res.answerResourceRecords[i].val)
 		}
 	} else {
-		fmt.Print(res.header.string())
+		fmt.Print(res.header)
 
 		fmt.Println(";; QUESTION SECTION:")
-		fmt.Printf(";%v\n\n", res.question.string())
+		fmt.Printf(";%v\n\n", res.question)
 
 		if 0 < len(res.answerResourceRecords) {
 			fmt.Println(";; ANSWER SECTION:")
 			for i := 0; i < len(res.answerResourceRecords); i++ {
-				fmt.Println(res.answerResourceRecords[i].string())
+				fmt.Println(res.answerResourceRecords[i])
 			}
 			fmt.Println()
 		}
@@ -549,15 +574,15 @@ func print(res *response, opts *opts) {
 		if 0 < len(res.authorityResourceRecords) {
 			fmt.Println(";; AUTHORITY SECTION:")
 			for i := 0; i < len(res.authorityResourceRecords); i++ {
-				fmt.Println(res.authorityResourceRecords[i].string())
+				fmt.Println(res.authorityResourceRecords[i])
 			}
 			fmt.Println()
 		}
 
-		arrs := make([]string, 0, len(res.additionalResourceRecords))
+		arrs := make([]resourceRecord, 0, len(res.additionalResourceRecords))
 		for i := 0; i < len(res.additionalResourceRecords); i++ {
-			if res.additionalResourceRecords[i].type_ != "OPT" {
-				arrs = append(arrs, res.additionalResourceRecords[i].string())
+			if res.additionalResourceRecords[i].type_.String() != "OPT" {
+				arrs = append(arrs, res.additionalResourceRecords[i])
 			}
 		}
 		if 0 < len(arrs) {
