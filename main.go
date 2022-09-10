@@ -446,6 +446,7 @@ type response struct {
 	authorityResourceRecords  []resourceRecord
 	additionalResourceRecords []resourceRecord
 	msgSize                   int
+	query_time                time.Duration
 }
 
 func parseResMsg(data []byte) (*response, error) {
@@ -483,6 +484,7 @@ func parseResMsg(data []byte) (*response, error) {
 		records[header.anCount : header.anCount+header.nsCount],
 		records[header.anCount+header.nsCount : header.anCount+header.nsCount+header.arCount],
 		current,
+		0,
 	}, nil
 }
 
@@ -617,6 +619,11 @@ func print(res *response, opts *opts) {
 			}
 			fmt.Println()
 		}
+		fmt.Printf(";; Query time: %v\n", res.query_time)
+		fmt.Printf(";; SERVER: %v#%v(%v)\n", opts.server, opts.port, opts.server)
+		fmt.Printf(";; WHEN: %v\n", time.Now().Format(time.RFC3339))
+		fmt.Printf(";; MSG SIZE  rcvd: %v\n", res.msgSize)
+		fmt.Println()
 	}
 }
 
@@ -639,13 +646,16 @@ func main() {
 	if err != nil {
 		die(err)
 	}
+	time_sent := time.Now()
 	resMsg, err := request("udp", opts.server+":"+opts.port, reqMsg)
 	if err != nil {
 		die(err)
 	}
+	query_time := time.Since(time_sent)
 	res, err := parseResMsg(resMsg)
 	if err != nil {
 		die(err)
 	}
+	res.query_time = query_time
 	print(res, opts)
 }
