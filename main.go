@@ -220,6 +220,7 @@ var typeOf = map[string]type_{
 	"A":     1,
 	"NS":    2,
 	"CNAME": 5,
+	"PTR":   12,
 	"MX":    15,
 	"TXT":   16,
 	"AAAA":  28,
@@ -229,6 +230,7 @@ var typeTextOf = map[type_]string{
 	1:  "A",
 	2:  "NS",
 	5:  "CNAME",
+	12: "PTR",
 	15: "MX",
 	16: "TXT",
 	28: "AAAA",
@@ -276,7 +278,7 @@ func readType(data []byte, current int) (field, int, error) {
 	if _, ok := typeTextOf[type_]; ok {
 		return type_, current + 2, nil
 	}
-	return type_, 0, fmt.Errorf("invalid type: %v", type_)
+	return type_, 0, fmt.Errorf("invalid type: %v", uint16(type_))
 }
 
 type class uint16
@@ -360,7 +362,7 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 		case (type_ == "A" && rdlength == 4) || (type_ == "AAAA" && rdlength == 16):
 			ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
 			val = ip.String()
-		case type_ == "NS" || type_ == "CNAME":
+		case type_ == "NS" || type_ == "CNAME" || type_ == "PTR":
 			decoded, _, err := decodeName(data, current)
 			if err != nil {
 				goto Error
@@ -524,12 +526,19 @@ func request(network string, address string, data []byte) ([]byte, error) {
 	return buf[:len], nil
 }
 
+func inAddrArpa(ipaddr string) string {
+	parts := strings.Split(ipaddr, ".")
+	parts[0], parts[1], parts[2], parts[3] = parts[3], parts[2], parts[1], parts[0]
+	return strings.Join(parts, ".") + ".in-addr.arpa"
+}
+
 type opts struct {
-	server string
-	port   string
-	name   string
-	type_  string
-	short  bool
+	server  string
+	port    string
+	reverse bool
+	name    string
+	type_   string
+	short   bool
 }
 
 func getOpts(args []string) (*opts, error) {
@@ -546,6 +555,9 @@ func getOpts(args []string) (*opts, error) {
 			opts.port = args[i]
 		case strings.HasPrefix(args[i], "-p"):
 			opts.port = args[i][2:]
+		case args[i] == "-x":
+			opts.reverse = true
+			opts.type_ = "PTR"
 		case strings.HasPrefix(args[i], "+"):
 			switch args[i] {
 			case "+short":
@@ -619,6 +631,9 @@ func main() {
 	opts, err := getOpts(os.Args[1:])
 	if err != nil {
 		die(err)
+	}
+	if opts.type_ == "PTR" {
+		opts.name = inAddrArpa(opts.name)
 	}
 	reqMsg, err := makeReqMsg(opts.name, opts.type_)
 	if err != nil {

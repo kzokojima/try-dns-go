@@ -1,0 +1,15 @@
+$TTL 3600
+
+; SOA
+; SOA record should be on one line to use provided helper scripts
+@   IN   SOA   ns1.example.com. hostmaster.example.com. 2016020202 7200 1800 1209600 86400
+
+; NAMESERVERS
+@                   IN                NS                   ns1.example.com.
+@                   IN                NS                   ns2.example.com.
+
+; A RECORDS
+1                   IN                PTR                  example.com.
+1                   IN                PTR                  www.example.com.
+2                   IN                PTR                  mail1.example.com.
+3                   IN                PTR                  mail2.example.com.
