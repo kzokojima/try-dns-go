@@ -4,7 +4,7 @@ expected=$(cat << EOS
 ;example.com. IN TXT
 
 ;; ANSWER SECTION:
-example.com. 3600 IN TXT "foo"
+example.com. 3600 IN TXT "foo" "bar"
 
 ;; AUTHORITY SECTION:
 example.com. 3600 IN NS ns1.example.com.

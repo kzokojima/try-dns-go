@@ -16,7 +16,7 @@ mail1               IN                A                    192.0.2.2
 mail2               IN                A                    192.0.2.3
 @                   IN                MX                   10 mail1
 @                   IN                MX                   20 mail2
-@                   IN                TXT                  foo
+@                   IN                TXT                  foo bar
 @                   IN                AAAA                 2001:db8::1
 long                IN                TXT                  12345678901234567890123456789012345678901234567890
 long                IN                TXT                  23456789012345678901234567890123456789012345678901

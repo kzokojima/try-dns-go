@@ -199,6 +199,17 @@ func decodeName(data []byte, current int) (field, int, error) {
 	return name(buf.String()), next, nil
 }
 
+func decodeTexts(data []byte, current int, end int) []string {
+	texts := make([]string, 0, 1)
+	for current < end {
+		txtlen := int(data[current])
+		text := string(data[current+1 : current+1+txtlen])
+		texts = append(texts, text)
+		current += 1 + txtlen
+	}
+	return texts
+}
+
 type question struct {
 	name  name
 	type_ type_
@@ -363,9 +374,11 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 			}
 			val = fmt.Sprintf("%v %v", preference, exchange)
 		case type_ == "TXT":
-			txtlen := int(data[current])
-			txt := string(data[current+1 : current+1+txtlen])
-			val = fmt.Sprintf("%q", txt)
+			texts := decodeTexts(data, current, current+int(rdlength))
+			for i, v := range texts {
+				texts[i] = fmt.Sprintf("%q", v)
+			}
+			val = strings.Join(texts, " ")
 		default:
 			val = fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength)
 		}
