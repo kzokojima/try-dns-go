@@ -541,6 +541,7 @@ type opts struct {
 	name    string
 	type_   string
 	short   bool
+	tcp     bool
 }
 
 func getOpts(args []string) (*opts, error) {
@@ -564,6 +565,8 @@ func getOpts(args []string) (*opts, error) {
 			switch args[i] {
 			case "+short":
 				opts.short = true
+			case "+tcp":
+				opts.tcp = true
 			default:
 				return nil, fmt.Errorf("invalid arg: %v", args[i])
 			}
@@ -658,12 +661,21 @@ func main() {
 	if err != nil {
 		die(err)
 	}
+	network := "udp"
+	if opts.tcp {
+		network = "tcp"
+		reqMsg = append([]byte{0, 0}, reqMsg...)
+		binary.BigEndian.PutUint16(reqMsg, uint16(len(reqMsg)-2))
+	}
 	time_sent := time.Now()
-	resMsg, err := request("udp", opts.server+":"+opts.port, reqMsg)
+	resMsg, err := request(network, opts.server+":"+opts.port, reqMsg)
 	if err != nil {
 		die(err)
 	}
 	query_time := time.Since(time_sent)
+	if opts.tcp {
+		resMsg = resMsg[2:]
+	}
 	res, err := parseResMsg(resMsg)
 	if err != nil {
 		die(err)

@@ -9,4 +9,5 @@ services:
       - ./nsd/conf:/etc/nsd:ro
       - ./nsd/zones:/zones
     ports:
+      - $DNS_PORT:53
       - $DNS_PORT:53/udp
