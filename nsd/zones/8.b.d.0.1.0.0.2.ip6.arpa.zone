@@ -9,7 +9,7 @@ $TTL 3600
 @                   IN                NS                   ns2.example.com.
 
 ; PTR RECORDS
-1                   IN                PTR                  example.com.
-1                   IN                PTR                  www.example.com.
-2                   IN                PTR                  mx1.example.com.
-3                   IN                PTR                  mx2.example.com.
+1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0  IN  PTR  example.com.
+1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0  IN  PTR  www.example.com.
+2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0  IN  PTR  mx1.example.com.
+3.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0  IN  PTR  mx2.example.com.

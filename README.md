@@ -21,6 +21,8 @@ $ ./try-dns-go @1.1.1.1 example.com NS
 $ ./try-dns-go @1.1.1.1 example.com MX
 $ ./try-dns-go @1.1.1.1 example.com TXT
 $ ./try-dns-go @1.1.1.1 example.com AAAA
+$ ./try-dns-go @1.1.1.1 -x 1.1.1.1
+$ ./try-dns-go @1.1.1.1 -x 2606:4700:4700::1111
 ```
 
 ## Develop

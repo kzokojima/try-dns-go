@@ -525,10 +525,29 @@ func request(network string, address string, data []byte) ([]byte, error) {
 	return buf[:len], nil
 }
 
-func inAddrArpa(ipaddr string) string {
+func arpaName(ipaddr string) (string, error) {
 	parts := strings.Split(ipaddr, ".")
-	parts[0], parts[1], parts[2], parts[3] = parts[3], parts[2], parts[1], parts[0]
-	return strings.Join(parts, ".") + ".in-addr.arpa"
+	if len(parts) == 4 { // IPv4
+		parts[0], parts[1], parts[2], parts[3] = parts[3], parts[2], parts[1], parts[0]
+		return strings.Join(parts, ".") + ".in-addr.arpa", nil
+	} else { // IPv6
+		addr, err := netip.ParseAddr(ipaddr)
+		if err != nil {
+			return "", err
+		}
+		expanded := addr.StringExpanded()
+		fmt.Println(ipaddr, expanded)
+		parts := make([]byte, 64)
+		for i, j := 0, len(expanded)-1; i < len(parts); i, j = i+1, j-1 {
+			if expanded[j] == ':' {
+				j--
+			}
+			parts[i] = expanded[j]
+			i++
+			parts[i] = '.'
+		}
+		return string(parts) + "ip6.arpa", nil
+	}
 }
 
 type opts struct {
@@ -655,8 +674,11 @@ func main() {
 	if err != nil {
 		die(err)
 	}
-	if opts.type_ == "PTR" {
-		opts.name = inAddrArpa(opts.name)
+	if opts.reverse {
+		opts.name, err = arpaName(opts.name)
+		if err != nil {
+			die(err)
+		}
 	}
 	reqMsg, err := makeReqMsg(opts.name, opts.type_, opts.rec)
 	if err != nil {
