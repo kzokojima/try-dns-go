@@ -23,14 +23,6 @@ type header struct {
 
 const HEADER_SIZE = 12
 
-func newQueryHeader() *header {
-	h := &header{}
-	h.id = uint16(rand.Intn(0x10000))
-	h.fields = 1 << 8 // RD
-	h.qdCount = 1
-	return h
-}
-
 func parseHeader(data []byte) (*header, error) {
 	if len(data) < HEADER_SIZE {
 		return nil, fmt.Errorf("header length")
@@ -490,14 +482,19 @@ func parseResMsg(data []byte) (*response, error) {
 
 const UDP_SIZE = 1500
 
-func makeReqMsg(n string, t string) ([]byte, error) {
+func makeReqMsg(n string, t string, rd bool) ([]byte, error) {
 	question := question{name(n), typeOf[t], classOf["IN"]}
 	questionBytes, err := question.bytes()
 	if err != nil {
 		return nil, err
 	}
-	header := newQueryHeader()
-	header.arCount = 1
+	headerFields := map[bool]uint16{false: 0, true: 1 << 8}[rd]
+	header := &header{
+		id:      uint16(rand.Intn(0x10000)),
+		fields:  headerFields,
+		qdCount: 1,
+		arCount: 1,
+	}
 	opt := optResourceRecord{
 		type_: 41,
 		class: UDP_SIZE, // UDP payload size
@@ -542,12 +539,14 @@ type opts struct {
 	type_   string
 	short   bool
 	tcp     bool
+	rec     bool
 }
 
 func getOpts(args []string) (*opts, error) {
 	var opts = &opts{
 		port:  "53",
 		type_: "A",
+		rec:   true,
 	}
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -567,6 +566,8 @@ func getOpts(args []string) (*opts, error) {
 				opts.short = true
 			case "+tcp":
 				opts.tcp = true
+			case "+norec":
+				opts.rec = false
 			default:
 				return nil, fmt.Errorf("invalid arg: %v", args[i])
 			}
@@ -657,7 +658,7 @@ func main() {
 	if opts.type_ == "PTR" {
 		opts.name = inAddrArpa(opts.name)
 	}
-	reqMsg, err := makeReqMsg(opts.name, opts.type_)
+	reqMsg, err := makeReqMsg(opts.name, opts.type_, opts.rec)
 	if err != nil {
 		die(err)
 	}
