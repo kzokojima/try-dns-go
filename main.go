@@ -292,10 +292,10 @@ func readClass(data []byte, current int) (field, int, error) {
 	return class, current + 2, nil
 }
 
-type ttl uint16
+type ttl uint32
 
 func (t ttl) String() string {
-	return fmt.Sprint(uint16(t))
+	return fmt.Sprint(uint32(t))
 }
 
 func readTtl(data []byte, current int) (field, int, error) {
@@ -585,7 +585,25 @@ func print(res *response, opts *opts) {
 			fmt.Println(res.answerResourceRecords[i].val)
 		}
 	} else {
+		var opt *resourceRecord
+		additionals := make([]resourceRecord, 0, len(res.additionalResourceRecords))
+		for i := 0; i < len(res.additionalResourceRecords); i++ {
+			if res.additionalResourceRecords[i].type_.String() == "OPT" {
+				opt = &res.additionalResourceRecords[i]
+			} else {
+				additionals = append(additionals, res.additionalResourceRecords[i])
+			}
+		}
+
 		fmt.Print(res.header)
+		fmt.Println()
+
+		flags := ""
+		if ((opt.ttl >> 15) & 1) == 1 {
+			flags = " do"
+		}
+		fmt.Println(";; OPT PSEUDOSECTION:")
+		fmt.Printf("; EDNS: version: %v, flags:%v; udp: %v\n", (opt.ttl>>16)&0xf, flags, int(opt.class))
 
 		fmt.Println(";; QUESTION SECTION:")
 		fmt.Printf(";%v\n\n", res.question)
@@ -606,16 +624,10 @@ func print(res *response, opts *opts) {
 			fmt.Println()
 		}
 
-		arrs := make([]resourceRecord, 0, len(res.additionalResourceRecords))
-		for i := 0; i < len(res.additionalResourceRecords); i++ {
-			if res.additionalResourceRecords[i].type_.String() != "OPT" {
-				arrs = append(arrs, res.additionalResourceRecords[i])
-			}
-		}
-		if 0 < len(arrs) {
+		if 0 < len(additionals) {
 			fmt.Println(";; ADDITIONAL SECTION:")
-			for i := 0; i < len(arrs); i++ {
-				fmt.Println(arrs[i])
+			for i := 0; i < len(additionals); i++ {
+				fmt.Println(additionals[i])
 			}
 			fmt.Println()
 		}
