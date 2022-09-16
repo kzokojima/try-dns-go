@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"net"
 	"net/netip"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -204,21 +206,25 @@ func decodeTexts(data []byte, current int, end int) []string {
 
 type question struct {
 	name  name
-	type_ type_
+	type_ rrType
 	class class
 }
 
-var typeOf = map[string]type_{
-	"A":     1,
-	"NS":    2,
-	"CNAME": 5,
-	"PTR":   12,
-	"MX":    15,
-	"TXT":   16,
-	"AAAA":  28,
-	"OPT":   41,
+var typeOf = map[string]rrType{
+	"A":      1,
+	"NS":     2,
+	"CNAME":  5,
+	"PTR":    12,
+	"MX":     15,
+	"TXT":    16,
+	"AAAA":   28,
+	"OPT":    41,
+	"DS":     43,
+	"RRSIG":  46,
+	"NSEC":   47,
+	"DNSKEY": 48,
 }
-var typeTextOf = map[type_]string{
+var typeTextOf = map[rrType]string{
 	1:  "A",
 	2:  "NS",
 	5:  "CNAME",
@@ -227,6 +233,10 @@ var typeTextOf = map[type_]string{
 	16: "TXT",
 	28: "AAAA",
 	41: "OPT",
+	43: "DS",
+	46: "RRSIG",
+	47: "NSEC",
+	48: "DNSKEY",
 }
 
 var classOf = map[string]class{
@@ -259,14 +269,14 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 	return fields, current, nil
 }
 
-type type_ uint16
+type rrType uint16
 
-func (t type_) String() string {
+func (t rrType) String() string {
 	return typeTextOf[t]
 }
 
 func readType(data []byte, current int) (field, int, error) {
-	type_ := type_(binary.BigEndian.Uint16(data[current:]))
+	type_ := rrType(binary.BigEndian.Uint16(data[current:]))
 	if _, ok := typeTextOf[type_]; ok {
 		return type_, current + 2, nil
 	}
@@ -326,25 +336,22 @@ func (q question) String() string {
 
 type resourceRecord struct {
 	name  name
-	type_ type_
+	type_ rrType
 	class class
 	ttl   ttl
 	val   string
 }
 
 func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error) {
-	var (
-		val string
-		err error
-	)
-
 	if data[current] != 0 {
+		var val string
+
 		fields, current, err := readFields(data, current, decodeName, readType, readClass, readTtl, readRdlength)
 		if err != nil {
-			goto Error
+			return nil, 0, err
 		}
 		name := fields[0].(name)
-		type_ := fields[1].(type_)
+		type_ := fields[1].(rrType)
 		class := fields[2].(class)
 		ttl := fields[3].(ttl)
 		rdlength := fields[4].(rdlength)
@@ -357,14 +364,14 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 		case type_ == "NS" || type_ == "CNAME" || type_ == "PTR":
 			decoded, _, err := decodeName(data, current)
 			if err != nil {
-				goto Error
+				return nil, 0, err
 			}
 			val = decoded.String()
 		case type_ == "MX":
 			preference := binary.BigEndian.Uint16(data[current:])
 			exchange, _, err := decodeName(data, current+2)
 			if err != nil {
-				goto Error
+				return nil, 0, err
 			}
 			val = fmt.Sprintf("%v %v", preference, exchange)
 		case type_ == "TXT":
@@ -373,6 +380,63 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 				texts[i] = fmt.Sprintf("%q", v)
 			}
 			val = strings.Join(texts, " ")
+		case type_ == "DS":
+			keyTag := binary.BigEndian.Uint16(data[current:])
+			algo := data[current+2]
+			digestType := data[current+3]
+			digest := data[current+4 : current+int(rdlength)]
+			val = fmt.Sprintf("%v %v %v %X", keyTag, algo, digestType, digest)
+		case type_ == "RRSIG":
+			typeCovered, _, _ := readType(data, current)
+			algo := data[current+2]
+			labels := data[current+3]
+			originalTtl := binary.BigEndian.Uint32(data[current+4:])
+			signatureExpiration := time.Unix(int64(binary.BigEndian.Uint32(data[current+8:])), 0).UTC()
+			signatureInception := time.Unix(int64(binary.BigEndian.Uint32(data[current+12:])), 0).UTC()
+			keyTag := binary.BigEndian.Uint16(data[current+16:])
+			decoded, next, err := decodeName(data, current+18)
+			if err != nil {
+				return nil, 0, err
+			}
+			signerName := decoded.String()
+			signature := data[next : current+int(rdlength)]
+			const LAYOUT = "20060102150405"
+			val = fmt.Sprintf("%v %v %v %v %v %v %v %v %v",
+				typeCovered.String(), algo, labels, originalTtl,
+				signatureExpiration.Format(LAYOUT), signatureInception.Format(LAYOUT),
+				keyTag, signerName, base64.StdEncoding.EncodeToString(signature))
+		case type_ == "NSEC":
+			decoded, next, err := decodeName(data, current)
+			if err != nil {
+				return nil, 0, err
+			}
+			nextDomainName := decoded.String()
+			windowBlock := data[next]
+			bitmapLen := int(data[next+1])
+			bitmap := data[next+2 : next+2+bitmapLen]
+			var typeTexts []string
+			var types []int
+			for _, v := range typeOf {
+				types = append(types, int(v))
+			}
+			sort.Ints(types)
+			if windowBlock == 0 {
+				for _, v := range types {
+					if v/8 < bitmapLen && bitmap[v/8]>>(7-v%8)&1 == 1 {
+						typeTexts = append(typeTexts, typeTextOf[rrType(uint16(v))])
+					}
+				}
+			}
+			val = fmt.Sprintf("%v %v", nextDomainName, strings.Join(typeTexts, " "))
+		case type_ == "DNSKEY":
+			flags := binary.BigEndian.Uint16(data[current:])
+			proto := data[current+2]
+			if proto != 3 {
+				return nil, 0, fmt.Errorf("DNSKEY proto: %v", proto)
+			}
+			algo := data[current+3]
+			key := data[current+4 : current+int(rdlength)]
+			val = fmt.Sprintf("%v %v %v %v", flags, proto, algo, base64.StdEncoding.EncodeToString(key))
 		default:
 			val = fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength)
 		}
@@ -390,7 +454,7 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 		if err != nil {
 			return nil, 0, err
 		}
-		type_ := fields[0].(type_)
+		type_ := fields[0].(rrType)
 		class := fields[1].(class)
 		ttl := fields[2].(ttl)
 
@@ -402,9 +466,6 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 			"",
 		}, current + OPT_RESOURCE_RECORD_HEADER_SIZE, nil
 	}
-
-Error:
-	return nil, 0, err
 }
 
 func (rr resourceRecord) String() string {
@@ -471,7 +532,7 @@ func parseResMsg(data []byte) (*response, error) {
 
 	return &response{
 		*header,
-		question{fields[0].(name), fields[1].(type_), fields[2].(class)},
+		question{fields[0].(name), fields[1].(rrType), fields[2].(class)},
 		records[:header.anCount],
 		records[header.anCount : header.anCount+header.nsCount],
 		records[header.anCount+header.nsCount : header.anCount+header.nsCount+header.arCount],

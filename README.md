@@ -52,6 +52,8 @@ $ go run . @127.0.0.1 -p 8053 example.com
 
 * [RFC 1034 Domain names - concepts and facilities](https://www.rfc-editor.org/info/rfc1034)
 * [RFC 1035 Domain names - implementation and specification](https://www.rfc-editor.org/info/rfc1035)
+* [RFC 4034 Resource Records for the DNS Security Extensions](https://www.rfc-editor.org/info/rfc4034)
+* [RFC 4035 Protocol Modifications for the DNS Security Extensions](https://www.rfc-editor.org/info/rfc4035)
 * [RFC 6891 Extension Mechanisms for DNS (EDNS(0))](https://www.rfc-editor.org/info/rfc6891)
 * [JPRS DNS関連技術情報#DNS関連のRFC](https://jprs.jp/tech/index.html#dns-rfc-info)
 * [DNSパケットフォーマットと、DNSパケットの作り方](https://atmarkit.itmedia.co.jp/ait/articles/1601/29/news014.html)
