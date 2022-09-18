@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
@@ -657,10 +658,33 @@ func getOpts(args []string) (*opts, error) {
 			opts.type_ = strings.ToUpper(args[i])
 		}
 	}
-	if len(opts.server) == 0 || len(opts.port) == 0 || len(opts.name) == 0 || len(opts.type_) == 0 {
+	if len(opts.port) == 0 || len(opts.name) == 0 || len(opts.type_) == 0 {
 		return nil, fmt.Errorf("args not found")
 	}
 	return opts, nil
+}
+
+func defaultNameServer() (string, error) {
+	file, err := os.Open("/etc/resolv.conf")
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	reader := bufio.NewReader(file)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		line = strings.TrimRight(line, "\n")
+		if line[0] == '#' {
+			continue
+		}
+		elems := strings.Split(line, " ")
+		if len(elems) == 2 && elems[0] == "nameserver" {
+			return elems[1], nil
+		}
+	}
 }
 
 func print(res *response, opts *opts) {
@@ -734,6 +758,13 @@ func main() {
 	opts, err := getOpts(os.Args[1:])
 	if err != nil {
 		die(err)
+	}
+	if opts.server == "" {
+		server, err := defaultNameServer()
+		if err != nil {
+			die(err)
+		}
+		opts.server = server
 	}
 	if opts.reverse {
 		opts.name, err = arpaName(opts.name)
