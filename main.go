@@ -166,6 +166,7 @@ func encodeName(in name) ([]byte, error) {
 }
 
 func decodeName(data []byte, current int) (field, int, error) {
+	next := -1
 	buf := new(bytes.Buffer)
 	i := current
 	for {
@@ -173,11 +174,12 @@ func decodeName(data []byte, current int) (field, int, error) {
 		if len == 0 {
 			i++
 			break
-		} else if len == 0xC0 {
-			i = int(data[i+1])
+		} else if len&0xC0 == 0xC0 {
+			if next == -1 {
+				next = i + 2
+			}
+			i = (len & ^0xC0 << 8) + int(data[i+1])
 			continue
-		} else if len&0xC0 != 0 {
-			return name(""), 0, fmt.Errorf("label length")
 		}
 		if buf.Len() != 0 {
 			buf.WriteString(".")
@@ -187,9 +189,8 @@ func decodeName(data []byte, current int) (field, int, error) {
 		i += len
 	}
 	buf.WriteString(".")
-	next := i
-	if i < current {
-		next = current + 2
+	if next == -1 {
+		next = i
 	}
 	return name(buf.String()), next, nil
 }
@@ -215,6 +216,7 @@ var typeOf = map[string]rrType{
 	"A":      1,
 	"NS":     2,
 	"CNAME":  5,
+	"SOA":    6,
 	"PTR":    12,
 	"MX":     15,
 	"TXT":    16,
@@ -229,6 +231,7 @@ var typeTextOf = map[rrType]string{
 	1:  "A",
 	2:  "NS",
 	5:  "CNAME",
+	6:  "SOA",
 	12: "PTR",
 	15: "MX",
 	16: "TXT",
@@ -375,6 +378,21 @@ func parseResourceRecord(data []byte, current int) (*resourceRecord, int, error)
 				return nil, 0, err
 			}
 			val = fmt.Sprintf("%v %v", preference, exchange)
+		case type_ == "SOA":
+			mname, next, err := decodeName(data, current)
+			if err != nil {
+				return nil, 0, err
+			}
+			rname, next, err := decodeName(data, next)
+			if err != nil {
+				return nil, 0, err
+			}
+			serial := binary.BigEndian.Uint32(data[next:])
+			refresh := binary.BigEndian.Uint32(data[next+4:])
+			retry := binary.BigEndian.Uint32(data[next+8:])
+			expire := binary.BigEndian.Uint32(data[next+12:])
+			minimum := binary.BigEndian.Uint32(data[next+16:])
+			val = fmt.Sprintf("%v %v %v %v %v %v %v", mname, rname, serial, refresh, retry, expire, minimum)
 		case type_ == "TXT":
 			texts := decodeTexts(data, current, current+int(rdlength))
 			for i, v := range texts {
