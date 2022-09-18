@@ -598,7 +598,6 @@ func arpaName(ipaddr string) (string, error) {
 			return "", err
 		}
 		expanded := addr.StringExpanded()
-		fmt.Println(ipaddr, expanded)
 		parts := make([]byte, 64)
 		for i, j := 0, len(expanded)-1; i < len(parts); i, j = i+1, j-1 {
 			if expanded[j] == ':' {
