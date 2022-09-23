@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -eu -o pipefail
 
+cd $(dirname ${0})
+
 trap 'handle_error $LINENO' ERR
 
 handle_error() {
@@ -28,11 +30,11 @@ assert_equals() {
 
 export COMPOSE_PROJECT_NAME="$(basename $(pwd))-testing"
 export DNS_PORT=8153
-readonly CMD="./try-dns-go @127.0.0.1 -p ${DNS_PORT}"
+readonly CMD="bin/lookup @127.0.0.1 -p ${DNS_PORT}"
 
 docker compose up -d 2> /dev/null
 
-go build
+./build.sh
 
 for each in test/*.sh ; do
     . $each

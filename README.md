@@ -3,7 +3,7 @@
 ## Build
 
 ```
-$ go build
+$ ./build.sh
 ```
 
 ## Test
@@ -15,14 +15,14 @@ $ ./test.sh
 ## Run
 
 ```
-$ ./try-dns-go @1.1.1.1 example.com A
-$ ./try-dns-go @1.1.1.1 www.example.com A
-$ ./try-dns-go @1.1.1.1 example.com NS
-$ ./try-dns-go @1.1.1.1 example.com MX
-$ ./try-dns-go @1.1.1.1 example.com TXT
-$ ./try-dns-go @1.1.1.1 example.com AAAA
-$ ./try-dns-go @1.1.1.1 -x 1.1.1.1
-$ ./try-dns-go @1.1.1.1 -x 2606:4700:4700::1111
+$ bin/lookup example.com A
+$ bin/lookup www.example.com A
+$ bin/lookup example.com NS
+$ bin/lookup example.com MX
+$ bin/lookup example.com TXT
+$ bin/lookup example.com AAAA
+$ bin/lookup -x 1.1.1.1
+$ bin/lookup -x 2606:4700:4700::1111
 ```
 
 ## Develop
@@ -45,7 +45,7 @@ $ docker compose down
 Run:
 
 ```
-$ go run . @127.0.0.1 -p 8053 example.com
+$ go run ./cmd/lookup @127.0.0.1 -p 8053 example.com
 ```
 
 ## References

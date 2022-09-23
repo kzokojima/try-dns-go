@@ -1,3 +1,3 @@
-module example/try-dns-go
+module try/dns
 
 go 1.19
