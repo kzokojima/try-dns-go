@@ -28,7 +28,10 @@ assert_equals() {
     fi
 }
 
-test_cmd() {
+test_go() {
+    if ! go test; then
+        status=1
+    fi
     for each in `ls cmd` ; do
         if ! go test "./cmd/${each}"; then
             status=1
@@ -58,7 +61,7 @@ test_sh() {
 }
 
 status=0
-test_cmd
+test_go
 test_sh
 if [[ $status = 0 ]]; then
     echo OK
