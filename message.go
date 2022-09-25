@@ -12,22 +12,22 @@ import (
 	"time"
 )
 
-type header struct {
-	id      uint16
-	fields  uint16
-	qdCount uint16
-	anCount uint16
-	nsCount uint16
-	arCount uint16
+type Header struct {
+	ID      uint16
+	Fields  uint16
+	QDCount uint16
+	ANCount uint16
+	NSCount uint16
+	ARCount uint16
 }
 
 const HEADER_SIZE = 12
 
-func parseHeader(data []byte) (*header, error) {
+func parseHeader(data []byte) (*Header, error) {
 	if len(data) < HEADER_SIZE {
 		return nil, fmt.Errorf("header length")
 	}
-	return &header{
+	return &Header{
 		binary.BigEndian.Uint16(data),
 		binary.BigEndian.Uint16(data[2:]),
 		binary.BigEndian.Uint16(data[4:]),
@@ -37,61 +37,61 @@ func parseHeader(data []byte) (*header, error) {
 	}, nil
 }
 
-func (h *header) qr() uint16 {
-	return h.fields >> 15
+func (h *Header) qr() uint16 {
+	return h.Fields >> 15
 }
-func (h *header) opcode() uint16 {
-	return (h.fields & (0xf << 11) >> 11)
-}
-
-func (h *header) aa() uint16 {
-	return h.fields & (1 << 10) >> 10
+func (h *Header) Opcode() uint16 {
+	return (h.Fields & (0xf << 11) >> 11)
 }
 
-func (h *header) tc() uint16 {
-	return h.fields & (1 << 9) >> 9
+func (h *Header) aa() uint16 {
+	return h.Fields & (1 << 10) >> 10
 }
 
-func (h *header) rd() uint16 {
-	return h.fields & (1 << 8) >> 8
+func (h *Header) tc() uint16 {
+	return h.Fields & (1 << 9) >> 9
 }
 
-func (h *header) ra() uint16 {
-	return h.fields & (1 << 7) >> 7
+func (h *Header) rd() uint16 {
+	return h.Fields & (1 << 8) >> 8
 }
 
-func (h *header) z() uint16 {
-	return h.fields & (1 << 6) >> 6
+func (h *Header) ra() uint16 {
+	return h.Fields & (1 << 7) >> 7
 }
 
-func (h *header) ad() uint16 {
-	return h.fields & (1 << 5) >> 5
+func (h *Header) z() uint16 {
+	return h.Fields & (1 << 6) >> 6
 }
 
-func (h *header) cd() uint16 {
-	return h.fields & (1 << 4) >> 4
+func (h *Header) ad() uint16 {
+	return h.Fields & (1 << 5) >> 5
 }
 
-func (h *header) rcode() uint16 {
-	return h.fields & 0xf
+func (h *Header) cd() uint16 {
+	return h.Fields & (1 << 4) >> 4
 }
 
-func (h *header) resourceRecordCount() int {
-	return int(h.anCount + h.nsCount + h.arCount)
+func (h *Header) rcode() uint16 {
+	return h.Fields & 0xf
 }
 
-func (h *header) bytes() []byte {
+func (h *Header) resourceRecordCount() int {
+	return int(h.ANCount + h.NSCount + h.ARCount)
+}
+
+func (h *Header) Bytes() []byte {
 	bytes := make([]byte, HEADER_SIZE)
-	binary.BigEndian.PutUint16(bytes[:], h.id)
-	binary.BigEndian.PutUint16(bytes[2:], h.fields)
-	binary.BigEndian.PutUint16(bytes[4:], h.qdCount)
-	binary.BigEndian.PutUint16(bytes[6:], h.anCount)
-	binary.BigEndian.PutUint16(bytes[8:], h.nsCount)
-	binary.BigEndian.PutUint16(bytes[10:], h.arCount)
+	binary.BigEndian.PutUint16(bytes[:], h.ID)
+	binary.BigEndian.PutUint16(bytes[2:], h.Fields)
+	binary.BigEndian.PutUint16(bytes[4:], h.QDCount)
+	binary.BigEndian.PutUint16(bytes[6:], h.ANCount)
+	binary.BigEndian.PutUint16(bytes[8:], h.NSCount)
+	binary.BigEndian.PutUint16(bytes[10:], h.ARCount)
 	return bytes
 }
 
-func (h header) String() string {
+func (h Header) String() string {
 	opcodeTexts := []string{"QUERY", "IQUERY", "STATUS"}
 	statusTexts := []string{"NOERROR", "FORMERR", "SERVFAIL", "NXDOMAIN", "NOTIMP", "REFUSED"}
 
@@ -123,14 +123,14 @@ func (h header) String() string {
 
 	return fmt.Sprintf(";; ->>HEADER<<- opcode: %v, status: %v, id: %v\n"+
 		";; flags: %v; QUERY: %v, ANSWER: %v, AUTHORITY: %v, ADDITIONAL: %v\n",
-		opcodeTexts[h.opcode()],
+		opcodeTexts[h.Opcode()],
 		statusTexts[h.rcode()],
-		h.id,
+		h.ID,
 		strings.Join(flags, " "),
-		h.qdCount,
-		h.anCount,
-		h.nsCount,
-		h.arCount)
+		h.QDCount,
+		h.ANCount,
+		h.NSCount,
+		h.ARCount)
 }
 
 const (
@@ -145,11 +145,13 @@ func (n name) String() string {
 }
 
 func encodeName(in name) ([]byte, error) {
-	if DOMAIN_NAME_LEN_MAX < len(in) {
-		return nil, fmt.Errorf("%s length", in)
+	name := string(in)
+	name = strings.TrimRight(name, ".")
+	if DOMAIN_NAME_LEN_MAX < len(name) {
+		return nil, fmt.Errorf("%s length", name)
 	}
 	buf := new(bytes.Buffer)
-	labels := strings.Split(string(in), ".")
+	labels := strings.Split(name, ".")
 	for _, label := range labels {
 		len := len(label)
 		if LABEL_LEN_MAX < len {
@@ -203,10 +205,10 @@ func decodeTexts(data []byte, current int, end int) []string {
 	return texts
 }
 
-type question struct {
-	name  name
-	type_ rrType
-	class class
+type Question struct {
+	Name  name
+	Type  rrType
+	Class class
 }
 
 var typeOf = map[string]rrType{
@@ -272,6 +274,10 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 
 type rrType uint16
 
+const (
+	TypeA rrType = 1
+)
+
 func (t rrType) String() string {
 	return typeTextOf[t]
 }
@@ -285,6 +291,10 @@ func readType(data []byte, current int) (field, int, error) {
 }
 
 type class uint16
+
+const (
+	ClassIN class = 1
+)
 
 func (c class) String() string {
 	return classTextOf[c]
@@ -317,8 +327,8 @@ func readRdlength(data []byte, current int) (field, int, error) {
 	return rdlength, current + 2, nil
 }
 
-func (q *question) bytes() ([]byte, error) {
-	encoded, err := encodeName(q.name)
+func (q *Question) Bytes() ([]byte, error) {
+	encoded, err := encodeName(q.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -326,13 +336,13 @@ func (q *question) bytes() ([]byte, error) {
 	len := len(encoded)
 	bytes := make([]byte, len+4)
 	copy(bytes, encoded)
-	binary.BigEndian.PutUint16(bytes[len:], uint16(q.type_))
-	binary.BigEndian.PutUint16(bytes[len+2:], uint16(q.class))
+	binary.BigEndian.PutUint16(bytes[len:], uint16(q.Type))
+	binary.BigEndian.PutUint16(bytes[len+2:], uint16(q.Class))
 	return bytes, nil
 }
 
-func (q question) String() string {
-	return fmt.Sprintf("%v %v %v", q.name, q.class, q.type_)
+func (q Question) String() string {
+	return fmt.Sprintf("%v %v %v", q.Name, q.Class, q.Type)
 }
 
 type ResourceRecord struct {
@@ -484,6 +494,31 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 	}
 }
 
+func (rr ResourceRecord) Bytes() ([]byte, error) {
+	encoded, err := encodeName(rr.Name)
+	if err != nil {
+		return nil, err
+	}
+	len := len(encoded)
+	bytes := make([]byte, len+10) // TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2)
+	copy(bytes, encoded)
+	binary.BigEndian.PutUint16(bytes[len:], uint16(rr.Type))
+	binary.BigEndian.PutUint16(bytes[len+2:], uint16(rr.Class))
+	binary.BigEndian.PutUint32(bytes[len+4:], uint32(rr.Ttl))
+	switch rr.Type {
+	case TypeA:
+		addr, err := netip.ParseAddr(rr.Val)
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(bytes[len+8:], uint16(4))
+		bytes = append(bytes, addr.AsSlice()...)
+	default:
+		return nil, fmt.Errorf("type: %v", rr.Type)
+	}
+	return bytes, nil
+}
+
 func (rr ResourceRecord) String() string {
 	return fmt.Sprintf("%v %v %v %v %v", rr.Name, rr.Ttl, rr.Class, rr.Type, rr.Val)
 }
@@ -509,8 +544,8 @@ func (opt *optResourceRecord) bytes() []byte {
 }
 
 type Response struct {
-	Header                    header
-	Question                  question
+	Header                    Header
+	Question                  Question
 	AnswerResourceRecords     []ResourceRecord
 	AuthorityResourceRecords  []ResourceRecord
 	AdditionalResourceRecords []ResourceRecord
@@ -518,19 +553,156 @@ type Response struct {
 	QueryTime                 time.Duration
 }
 
+func MakeResponse(request Request, addrs []string) (*Response, error) {
+	reqHeader := request.Header
+	resHeader := Header{
+		ID: reqHeader.ID,
+		Fields: 1<<15 | // QR
+			reqHeader.Opcode()<<11 | // OPCODE
+			0, // RCODE
+		QDCount: 1,
+		ANCount: uint16(len(addrs)),
+	}
+	res := Response{
+		resHeader,
+		request.Question,
+		nil,
+		nil,
+		nil,
+		0,
+		0,
+	}
+	for _, addr := range addrs {
+		rr := ResourceRecord{
+			request.Question.Name,
+			request.Question.Type,
+			request.Question.Class,
+			ttl(3600),
+			addr,
+		}
+		res.AnswerResourceRecords = append(res.AnswerResourceRecords, rr)
+	}
+	return &res, nil
+}
+
 func ParseResMsg(data []byte) (*Response, error) {
-	// Header section
-	header, err := parseHeader(data)
+	msg, err := parseMessage(data)
 	if err != nil {
 		return nil, err
 	}
 
-	if header.rcode() != 0 {
-		return nil, fmt.Errorf("RCODE: %v", header.rcode())
+	return &Response{
+		msg.Header,
+		msg.Question,
+		msg.AnswerResourceRecords,
+		msg.AuthorityResourceRecords,
+		msg.AdditionalResourceRecords,
+		msg.Size,
+		0,
+	}, nil
+}
+
+func (res *Response) Bytes() ([]byte, error) {
+	questionBytes, err := res.Question.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	bytes := []byte{}
+	bytes = append(bytes, res.Header.Bytes()...)
+	bytes = append(bytes, questionBytes...)
+	for _, rr := range res.AnswerResourceRecords {
+		rrBytes, err := rr.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		bytes = append(bytes, rrBytes...)
+	}
+	return bytes, nil
+}
+
+func MakeErrResMsg(request *Request) []byte {
+	resHeader := Header{
+		ID: request.Header.ID,
+		Fields: 1<<15 | // QR
+			request.Header.Opcode()<<11 | // OPCODE
+			3, // RCODE(NXDOMAIN)
+		QDCount: 1,
+	}
+	qbytes, err := request.Question.Bytes()
+	if err != nil {
+		return nil
+	}
+	res := append(resHeader.Bytes(), qbytes...)
+	return res
+}
+
+const UDP_SIZE = 1500
+
+type Request struct {
+	Header                    Header
+	Question                  Question
+	AdditionalResourceRecords []ResourceRecord
+	MsgSize                   int
+}
+
+func MakeReqMsg(n string, t string, rd bool) ([]byte, error) {
+	question := Question{name(n), typeOf[t], classOf["IN"]}
+	questionBytes, err := question.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	headerFields := map[bool]uint16{false: 0, true: 1 << 8}[rd]
+	header := &Header{
+		ID:      uint16(rand.Intn(0x10000)),
+		Fields:  headerFields,
+		QDCount: 1,
+		ARCount: 1,
+	}
+	opt := optResourceRecord{
+		type_: 41,
+		class: UDP_SIZE, // UDP payload size
+	}
+
+	bytes := []byte{}
+	bytes = append(bytes, header.Bytes()...)
+	bytes = append(bytes, questionBytes...)
+	bytes = append(bytes, opt.bytes()...)
+
+	return bytes, nil
+}
+
+func ParseRequest(data []byte) (*Request, error) {
+	msg, err := parseMessage(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Request{
+		msg.Header,
+		msg.Question,
+		msg.AdditionalResourceRecords,
+		msg.Size,
+	}, nil
+}
+
+type message struct {
+	Header                    Header
+	Question                  Question
+	AnswerResourceRecords     []ResourceRecord
+	AuthorityResourceRecords  []ResourceRecord
+	AdditionalResourceRecords []ResourceRecord
+	Size                      int
+}
+
+func parseMessage(msg []byte) (*message, error) {
+	// Header section
+	header, err := parseHeader(msg)
+	if err != nil {
+		return nil, err
 	}
 
 	// Question section
-	fields, current, err := readFields(data, HEADER_SIZE, decodeName, readType, readClass)
+	fields, current, err := readFields(msg, HEADER_SIZE, decodeName, readType, readClass)
 	if err != nil {
 		return nil, err
 	}
@@ -539,48 +711,19 @@ func ParseResMsg(data []byte) (*Response, error) {
 	records := make([]ResourceRecord, header.resourceRecordCount())
 	for i := 0; i < header.resourceRecordCount(); i++ {
 		var record *ResourceRecord
-		record, current, err = parseResourceRecord(data, current)
+		record, current, err = parseResourceRecord(msg, current)
 		if err != nil {
 			return nil, err
 		}
 		records[i] = *record
 	}
 
-	return &Response{
+	return &message{
 		*header,
-		question{fields[0].(name), fields[1].(rrType), fields[2].(class)},
-		records[:header.anCount],
-		records[header.anCount : header.anCount+header.nsCount],
-		records[header.anCount+header.nsCount : header.anCount+header.nsCount+header.arCount],
+		Question{fields[0].(name), fields[1].(rrType), fields[2].(class)},
+		records[:header.ANCount],
+		records[header.ANCount : header.ANCount+header.NSCount],
+		records[header.ANCount+header.NSCount : header.ANCount+header.NSCount+header.ARCount],
 		current,
-		0,
 	}, nil
-}
-
-const UDP_SIZE = 1500
-
-func MakeReqMsg(n string, t string, rd bool) ([]byte, error) {
-	question := question{name(n), typeOf[t], classOf["IN"]}
-	questionBytes, err := question.bytes()
-	if err != nil {
-		return nil, err
-	}
-	headerFields := map[bool]uint16{false: 0, true: 1 << 8}[rd]
-	header := &header{
-		id:      uint16(rand.Intn(0x10000)),
-		fields:  headerFields,
-		qdCount: 1,
-		arCount: 1,
-	}
-	opt := optResourceRecord{
-		type_: 41,
-		class: UDP_SIZE, // UDP payload size
-	}
-
-	bytes := []byte{}
-	bytes = append(bytes, header.bytes()...)
-	bytes = append(bytes, questionBytes...)
-	bytes = append(bytes, opt.bytes()...)
-
-	return bytes, nil
 }

@@ -149,12 +149,14 @@ func print(res *dns.Response, opts *opts) {
 		fmt.Print(res.Header)
 		fmt.Println()
 
-		flags := ""
-		if ((opt.Ttl >> 15) & 1) == 1 {
-			flags = " do"
+		if opt != nil {
+			flags := ""
+			if ((opt.Ttl >> 15) & 1) == 1 {
+				flags = " do"
+			}
+			fmt.Println(";; OPT PSEUDOSECTION:")
+			fmt.Printf("; EDNS: version: %v, flags:%v; udp: %v\n", (opt.Ttl>>16)&0xf, flags, int(opt.Class))
 		}
-		fmt.Println(";; OPT PSEUDOSECTION:")
-		fmt.Printf("; EDNS: version: %v, flags:%v; udp: %v\n", (opt.Ttl>>16)&0xf, flags, int(opt.Class))
 
 		fmt.Println(";; QUESTION SECTION:")
 		fmt.Printf(";%v\n\n", res.Question)
