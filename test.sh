@@ -23,8 +23,9 @@ assert_equals() {
             echo "${2}"
             echo '```'
         } >&2
-        docker compose down 2> /dev/null
-        exit 1
+        # docker compose down 2> /dev/null
+        # exit 1
+        return 1
     fi
 }
 
