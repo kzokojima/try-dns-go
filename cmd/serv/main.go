@@ -9,43 +9,67 @@ import (
 	"try/dns"
 )
 
-type RRVal interface{}
+var rrs map[dns.Question][]dns.ResourceRecord
 
-var rrs = map[dns.Question]RRVal{
-	dns.Question{"a.example.", dns.TypeA, dns.ClassIN}: []string{"192.0.2.1"},
+func loadZonefiles(path string) error {
+	rrs = make(map[dns.Question][]dns.ResourceRecord)
+
+	zone, err := dns.ReadZonefile(path)
+	if err != err {
+		return err
+	}
+	for _, v := range zone.Records {
+		key := dns.Question{v.Name, v.Type, v.Class}
+		if _, ok := rrs[key]; !ok {
+			rrs[key] = make([]dns.ResourceRecord, 0)
+		}
+		rrs[key] = append(rrs[key], v)
+	}
+	return nil
 }
 
 func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
+	var bytes []byte
+
 	request, err := dns.ParseRequest(req)
 	if err != nil {
-		log.Print(err)
-		return
+		log.Print("[error] ", err)
+		goto Error
 	}
-	rrval, ok := rrs[request.Question]
-	if ok {
-		addrs := rrval.([]string)
-		res, err := dns.MakeResponse(*request, addrs)
+
+	if rrs, ok := rrs[request.Question]; ok {
+		res, err := dns.MakeResponse(*request, rrs)
 		if err != nil {
-			log.Print(err)
-			return
+			log.Print("[error] ", err)
+			goto Error
 		}
-		bytes, err := res.Bytes()
+		bytes, err = res.Bytes()
 		if err != nil {
-			log.Print(err)
-			return
+			log.Print("[error] ", err)
+			goto Error
 		}
-		conn.WriteTo(bytes, addr)
 	} else {
-		bytes := dns.MakeErrResMsg(request)
-		conn.WriteTo(bytes, addr)
+		goto Error
 	}
+
+End:
+	conn.WriteTo(bytes, addr)
+	log.Printf("%v %v", addr.String(), len(bytes))
+
+	return
+
+Error:
+	bytes = dns.MakeErrResMsg(request)
+	goto End
 }
 
 func main() {
 	log.SetPrefix(path.Base(os.Args[0]) + " ")
 	log.Print("os.Args: ", strings.Join(os.Args, " "))
 
-	conn, err := net.ListenPacket("udp", os.Args[1])
+	loadZonefiles(os.Args[1])
+
+	conn, err := net.ListenPacket("udp", os.Args[2])
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -54,10 +78,9 @@ func main() {
 		buf := make([]byte, 1500)
 		n, addr, err := conn.ReadFrom(buf[:])
 		if err != nil {
-			log.Print(err)
+			log.Print("[error] ", err)
 			continue
 		}
-		log.Print("request from ", addr.String())
 		go handleConnection(conn, addr, buf[:n])
 	}
 }

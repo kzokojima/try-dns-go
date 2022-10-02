@@ -138,13 +138,13 @@ const (
 	DOMAIN_NAME_LEN_MAX = 253
 )
 
-type name string
+type Name string
 
-func (n name) String() string {
+func (n Name) String() string {
 	return string(n)
 }
 
-func encodeName(in name) ([]byte, error) {
+func encodeName(in Name) ([]byte, error) {
 	name := string(in)
 	name = strings.TrimRight(name, ".")
 	if DOMAIN_NAME_LEN_MAX < len(name) {
@@ -191,7 +191,7 @@ func decodeName(data []byte, current int) (field, int, error) {
 	if next == -1 {
 		next = i
 	}
-	return name(buf.String()), next, nil
+	return Name(buf.String()), next, nil
 }
 
 func decodeTexts(data []byte, current int, end int) []string {
@@ -206,7 +206,7 @@ func decodeTexts(data []byte, current int, end int) []string {
 }
 
 type Question struct {
-	Name  name
+	Name  Name
 	Type  rrType
 	Class class
 }
@@ -275,7 +275,8 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 type rrType uint16
 
 const (
-	TypeA rrType = 1
+	TypeA  rrType = 1
+	TypeMX rrType = 15
 )
 
 func (t rrType) String() string {
@@ -305,14 +306,14 @@ func readClass(data []byte, current int) (field, int, error) {
 	return class, current + 2, nil
 }
 
-type ttl uint32
+type TTL uint32
 
-func (t ttl) String() string {
+func (t TTL) String() string {
 	return fmt.Sprint(uint32(t))
 }
 
 func readTtl(data []byte, current int) (field, int, error) {
-	ttl := ttl(binary.BigEndian.Uint32(data[current:]))
+	ttl := TTL(binary.BigEndian.Uint32(data[current:]))
 	return ttl, current + 4, nil
 }
 
@@ -345,12 +346,22 @@ func (q Question) String() string {
 	return fmt.Sprintf("%v %v %v", q.Name, q.Class, q.Type)
 }
 
+type RData interface {
+	String() string
+}
+
+type RDataStr string
+
+func (s RDataStr) String() string {
+	return string(s)
+}
+
 type ResourceRecord struct {
-	Name  name
+	Name  Name
 	Type  rrType
 	Class class
-	Ttl   ttl
-	Val   string
+	TTL   TTL
+	RData RData
 }
 
 func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error) {
@@ -361,10 +372,10 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		if err != nil {
 			return nil, 0, err
 		}
-		name := fields[0].(name)
+		name := fields[0].(Name)
 		type_ := fields[1].(rrType)
 		class := fields[2].(class)
-		ttl := fields[3].(ttl)
+		ttl := fields[3].(TTL)
 		rdlength := fields[4].(rdlength)
 
 		// rddata
@@ -473,7 +484,7 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 			type_,
 			class,
 			ttl,
-			val,
+			RDataStr(val),
 		}, current, nil
 	} else { // OPT
 		fields, _, err := readFields(data, current+1, readType, readClass, readTtl, readRdlength)
@@ -482,14 +493,14 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		}
 		type_ := fields[0].(rrType)
 		class := fields[1].(class)
-		ttl := fields[2].(ttl)
+		ttl := fields[2].(TTL)
 
 		return &ResourceRecord{
-			name(""),
+			Name(""),
 			type_,
 			class,
 			ttl,
-			"",
+			RDataStr(""),
 		}, current + OPT_RESOURCE_RECORD_HEADER_SIZE, nil
 	}
 }
@@ -499,20 +510,30 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	len := len(encoded)
-	bytes := make([]byte, len+10) // TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2)
+	l := len(encoded)
+	bytes := make([]byte, l+10) // TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2)
 	copy(bytes, encoded)
-	binary.BigEndian.PutUint16(bytes[len:], uint16(rr.Type))
-	binary.BigEndian.PutUint16(bytes[len+2:], uint16(rr.Class))
-	binary.BigEndian.PutUint32(bytes[len+4:], uint32(rr.Ttl))
+	binary.BigEndian.PutUint16(bytes[l:], uint16(rr.Type))
+	binary.BigEndian.PutUint16(bytes[l+2:], uint16(rr.Class))
+	binary.BigEndian.PutUint32(bytes[l+4:], uint32(rr.TTL))
 	switch rr.Type {
 	case TypeA:
-		addr, err := netip.ParseAddr(rr.Val)
+		addr, err := netip.ParseAddr(rr.RData.String())
 		if err != nil {
 			return nil, err
 		}
-		binary.BigEndian.PutUint16(bytes[len+8:], uint16(4))
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(4))
 		bytes = append(bytes, addr.AsSlice()...)
+	case TypeMX:
+		mx := rr.RData.(MX)
+		name, err := encodeName(Name(mx.Exchange))
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(2+uint16(len(name))))
+		bytes = append(bytes, byte(0), byte(0))
+		binary.BigEndian.PutUint16(bytes[l+10:], uint16(mx.Preference))
+		bytes = append(bytes, name...)
 	default:
 		return nil, fmt.Errorf("type: %v", rr.Type)
 	}
@@ -520,7 +541,7 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 }
 
 func (rr ResourceRecord) String() string {
-	return fmt.Sprintf("%v %v %v %v %v", rr.Name, rr.Ttl, rr.Class, rr.Type, rr.Val)
+	return fmt.Sprintf("%v %v %v %v %v", rr.Name, rr.TTL, rr.Class, rr.Type, rr.RData.String())
 }
 
 type optResourceRecord struct {
@@ -553,7 +574,7 @@ type Response struct {
 	QueryTime                 time.Duration
 }
 
-func MakeResponse(request Request, addrs []string) (*Response, error) {
+func MakeResponse(request Request, rrs []ResourceRecord) (*Response, error) {
 	reqHeader := request.Header
 	resHeader := Header{
 		ID: reqHeader.ID,
@@ -561,26 +582,16 @@ func MakeResponse(request Request, addrs []string) (*Response, error) {
 			reqHeader.Opcode()<<11 | // OPCODE
 			0, // RCODE
 		QDCount: 1,
-		ANCount: uint16(len(addrs)),
+		ANCount: uint16(len(rrs)),
 	}
 	res := Response{
 		resHeader,
 		request.Question,
-		nil,
+		rrs,
 		nil,
 		nil,
 		0,
 		0,
-	}
-	for _, addr := range addrs {
-		rr := ResourceRecord{
-			request.Question.Name,
-			request.Question.Type,
-			request.Question.Class,
-			ttl(3600),
-			addr,
-		}
-		res.AnswerResourceRecords = append(res.AnswerResourceRecords, rr)
 	}
 	return &res, nil
 }
@@ -646,7 +657,7 @@ type Request struct {
 }
 
 func MakeReqMsg(n string, t string, rd bool) ([]byte, error) {
-	question := Question{name(n), typeOf[t], classOf["IN"]}
+	question := Question{Name(n), typeOf[t], classOf["IN"]}
 	questionBytes, err := question.Bytes()
 	if err != nil {
 		return nil, err
@@ -720,10 +731,21 @@ func parseMessage(msg []byte) (*message, error) {
 
 	return &message{
 		*header,
-		Question{fields[0].(name), fields[1].(rrType), fields[2].(class)},
+		Question{fields[0].(Name), fields[1].(rrType), fields[2].(class)},
 		records[:header.ANCount],
 		records[header.ANCount : header.ANCount+header.NSCount],
 		records[header.ANCount+header.NSCount : header.ANCount+header.NSCount+header.ARCount],
 		current,
 	}, nil
+}
+
+type A = netip.Addr
+
+type MX struct {
+	Preference int
+	Exchange   string
+}
+
+func (mx MX) String() string {
+	return fmt.Sprint(mx.Preference, " ", mx.Exchange)
 }

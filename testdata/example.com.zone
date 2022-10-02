@@ -1,0 +1,13 @@
+;comment
+; comment
+ ;comment
+
+$ORIGIN     example.com.
+$TTL        3600
+
+@   600 A   192.0.2.1
+@   600 A   192.0.2.2
+mx1     A   192.0.2.3
+mx2     A   192.0.2.4
+@       MX  10  mx1
+@       MX  20  mx2

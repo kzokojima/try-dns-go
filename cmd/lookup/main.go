@@ -133,7 +133,7 @@ func defaultNameServer() (string, error) {
 func print(res *dns.Response, opts *opts) {
 	if opts.short {
 		for i := 0; i < len(res.AnswerResourceRecords); i++ {
-			fmt.Println(res.AnswerResourceRecords[i].Val)
+			fmt.Println(res.AnswerResourceRecords[i].RData)
 		}
 	} else {
 		var opt *dns.ResourceRecord
@@ -151,11 +151,11 @@ func print(res *dns.Response, opts *opts) {
 
 		if opt != nil {
 			flags := ""
-			if ((opt.Ttl >> 15) & 1) == 1 {
+			if ((opt.TTL >> 15) & 1) == 1 {
 				flags = " do"
 			}
 			fmt.Println(";; OPT PSEUDOSECTION:")
-			fmt.Printf("; EDNS: version: %v, flags:%v; udp: %v\n", (opt.Ttl>>16)&0xf, flags, int(opt.Class))
+			fmt.Printf("; EDNS: version: %v, flags:%v; udp: %v\n", (opt.TTL>>16)&0xf, flags, int(opt.Class))
 		}
 
 		fmt.Println(";; QUESTION SECTION:")
