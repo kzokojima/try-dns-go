@@ -5,7 +5,8 @@ expected=$(cat << EOS
 
 ;; ANSWER SECTION:
 www.example.com. 3600 IN CNAME example.com.
-example.com. 3600 IN A 192.0.2.1
+example.com. 600 IN A 192.0.2.1
+example.com. 600 IN A 192.0.2.2
 
 ;; AUTHORITY SECTION:
 example.com. 3600 IN NS ns1.example.com.

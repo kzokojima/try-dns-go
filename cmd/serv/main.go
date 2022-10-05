@@ -15,7 +15,7 @@ func loadZonefiles(path string) error {
 	rrs = make(map[dns.Question][]dns.ResourceRecord)
 
 	zone, err := dns.ReadZonefile(path)
-	if err != err {
+	if err != nil {
 		return err
 	}
 	for _, v := range zone.Records {

@@ -43,8 +43,9 @@ func ReadZonefile(path string) (*Zone, error) {
 			}
 		} else {
 			var (
-				name string
-				ttl  int
+				name  string
+				ttl   int
+				class class = ClassIN
 			)
 
 			// name
@@ -62,6 +63,12 @@ func ReadZonefile(path string) (*Zone, error) {
 			if err != nil {
 				ttl = zone.TTL
 			} else {
+				fields = fields[1:]
+			}
+
+			// class
+			if fields[0] == "IN" {
+				class = ClassIN
 				fields = fields[1:]
 			}
 
@@ -95,14 +102,29 @@ func ReadZonefile(path string) (*Zone, error) {
 					preference,
 					exchange,
 				}
+			} else if fields[0] == "SOA" {
+				// TODO
+				continue
+			} else if fields[0] == "NS" {
+				// TODO
+				continue
+			} else if fields[0] == "CNAME" {
+				// TODO
+				continue
+			} else if fields[0] == "TXT" {
+				// TODO
+				continue
+			} else if fields[0] == "AAAA" {
+				// TODO
+				continue
 			} else {
-				return nil, fmt.Errorf("invalid format")
+				return nil, fmt.Errorf("invalid format: %v", fields)
 			}
 
 			zone.Records = append(zone.Records, ResourceRecord{
 				Name(name),
 				type_,
-				ClassIN,
+				class,
 				TTL(ttl),
 				rdata,
 			})

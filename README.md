@@ -27,7 +27,7 @@ $ bin/lookup -x 2606:4700:4700::1111
 
 ## Develop
 
-Zone files: `nsd/zones/*.zone`
+Zone files: `testdata/zones/*.zone`
 
 Local DNS server operations:
 

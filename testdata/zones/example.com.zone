@@ -9,11 +9,12 @@ $TTL 3600
 @                   IN                NS                   ns1.example.com.
 @                   IN                NS                   ns2.example.com.
 
-; A RECORDS
-@                   IN                A                    192.0.2.1
+; RECORDS
+@           600     IN                A                    192.0.2.1
+@           600     IN                A                    192.0.2.2
 www                 IN                CNAME                @
-mx1                 IN                A                    192.0.2.2
-mx2                 IN                A                    192.0.2.3
+mx1                 IN                A                    192.0.2.3
+mx2                 IN                A                    192.0.2.4
 @                   IN                MX                   10 mx1
 @                   IN                MX                   20 mx2
 @                   IN                TXT                  foo bar
