@@ -105,9 +105,13 @@ func ReadZonefile(path string) (*Zone, error) {
 			} else if fields[0] == "SOA" {
 				// TODO
 				continue
-			} else if fields[0] == "NS" {
-				// TODO
-				continue
+			} else if fields[0] == "NS" && len(fields) == 2 {
+				name := fields[1]
+				if !strings.HasSuffix(name, ".") {
+					name = fields[1] + "." + zone.Origin
+				}
+				type_ = TypeNS
+				rdata = NS(name)
 			} else if fields[0] == "CNAME" {
 				// TODO
 				continue

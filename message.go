@@ -276,6 +276,7 @@ type rrType uint16
 
 const (
 	TypeA  rrType = 1
+	TypeNS rrType = 2
 	TypeMX rrType = 15
 )
 
@@ -740,6 +741,8 @@ func parseMessage(msg []byte) (*message, error) {
 }
 
 type A = netip.Addr
+
+type NS = Name
 
 type MX struct {
 	Preference int
