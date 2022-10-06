@@ -11,22 +11,7 @@ handle_error() {
 }
 
 assert_equals() {
-    if [[ "${1}" != "${2}" ]] ; then
-        {
-            echo 'failed'
-            echo 'expected:'
-            echo '```'
-            echo "${1}"
-            echo '```'
-            echo 'actual:'
-            echo '```'
-            echo "${2}"
-            echo '```'
-        } >&2
-        # docker compose down 2> /dev/null
-        # exit 1
-        return 1
-    fi
+    diff --ignore-space-change <(echo "$1") <(echo "$2")
 }
 
 test_go() {
