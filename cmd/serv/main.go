@@ -21,13 +21,13 @@ func loadZonefiles(path string) error {
 		return err
 	}
 	for _, v := range zone.Records {
-		key := dns.Question{v.Name, v.Type, v.Class}
+		key := dns.Question{Name: v.Name, Type: v.Type, Class: v.Class}
 		if _, ok := rrs[key]; !ok {
 			rrs[key] = make([]dns.ResourceRecord, 0)
 		}
 		rrs[key] = append(rrs[key], v)
 	}
-	nsRecords, _ = rrs[dns.Question{dns.Name(zone.Origin), dns.TypeNS, dns.ClassIN}]
+	nsRecords = rrs[dns.Question{Name: dns.Name(zone.Origin), Type: dns.TypeNS, Class: dns.ClassIN}]
 	return nil
 }
 
