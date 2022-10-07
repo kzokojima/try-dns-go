@@ -118,9 +118,13 @@ func ReadZonefile(path string) (*Zone, error) {
 			} else if fields[0] == "TXT" {
 				type_ = TypeTXT
 				rdata = newTxt(fields[1:])
-			} else if fields[0] == "AAAA" {
-				// TODO
-				continue
+			} else if fields[0] == "AAAA" && len(fields) == 2 {
+				type_ = TypeAAAA
+				aaaa, err := newAAAA(fields[1:])
+				if err != nil {
+					return nil, err
+				}
+				rdata = *aaaa
 			} else {
 				return nil, fmt.Errorf("invalid format: %v", fields)
 			}

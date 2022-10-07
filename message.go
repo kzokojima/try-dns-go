@@ -288,10 +288,11 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 type rrType uint16
 
 const (
-	TypeA   rrType = 1
-	TypeNS  rrType = 2
-	TypeMX  rrType = 15
-	TypeTXT rrType = 16
+	TypeA    rrType = 1
+	TypeNS   rrType = 2
+	TypeMX   rrType = 15
+	TypeTXT  rrType = 16
+	TypeAAAA rrType = 28
 )
 
 func (t rrType) String() string {
@@ -564,6 +565,13 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		}
 		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(txt)))
 		bytes = append(bytes, txt...)
+	case TypeAAAA:
+		aaaa, err := rr.RData.(AAAA).encode()
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(aaaa)))
+		bytes = append(bytes, aaaa...)
 	default:
 		return nil, fmt.Errorf("type: %v", rr.Type)
 	}
@@ -802,4 +810,26 @@ func (txt TXT) encode() ([]byte, error) {
 
 func (txt TXT) String() string {
 	return strings.ReplaceAll(string(txt), "\x00", " ")
+}
+
+type AAAA netip.Addr
+
+func newAAAA(fields []string) (*AAAA, error) {
+	addr, err := netip.ParseAddr(fields[0])
+	if err != nil {
+		return nil, err
+	}
+	if !addr.Is6() {
+		return nil, fmt.Errorf("invalid IPv4 addr")
+	}
+	aaaa := AAAA(addr)
+	return &aaaa, nil
+}
+
+func (aaaa AAAA) encode() ([]byte, error) {
+	return netip.Addr(aaaa).AsSlice(), nil
+}
+
+func (aaaa AAAA) String() string {
+	return netip.Addr(aaaa).String()
 }

@@ -46,4 +46,10 @@ func TestReadZonefile(t *testing.T) {
 	if expected != zone.Records[8] {
 		t.Error(zone.Records[8])
 	}
+
+	// AAAAA record
+	expected = ResourceRecord{"example.com.", TypeAAAA, ClassIN, 3600, AAAA(netip.MustParseAddr("2001:db8::1"))}
+	if expected != zone.Records[9] {
+		t.Error(zone.Records[9])
+	}
 }
