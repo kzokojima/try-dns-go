@@ -194,6 +194,19 @@ func decodeName(data []byte, current int) (field, int, error) {
 	return Name(buf.String()), next, nil
 }
 
+func encodeTexts(texts []string) ([]byte, error) {
+	bytes := make([]byte, 0)
+	for _, text := range texts {
+		l := len(text)
+		if 255 < l {
+			return nil, fmt.Errorf("invalid length")
+		}
+		bytes = append(bytes, byte(len(text)))
+		bytes = append(bytes, text...)
+	}
+	return bytes, nil
+}
+
 func decodeTexts(data []byte, current int, end int) []string {
 	texts := make([]string, 0, 1)
 	for current < end {
@@ -275,9 +288,10 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 type rrType uint16
 
 const (
-	TypeA  rrType = 1
-	TypeNS rrType = 2
-	TypeMX rrType = 15
+	TypeA   rrType = 1
+	TypeNS  rrType = 2
+	TypeMX  rrType = 15
+	TypeTXT rrType = 16
 )
 
 func (t rrType) String() string {
@@ -543,6 +557,13 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		bytes = append(bytes, byte(0), byte(0))
 		binary.BigEndian.PutUint16(bytes[l+10:], uint16(mx.Preference))
 		bytes = append(bytes, name...)
+	case TypeTXT:
+		txt, err := rr.RData.(TXT).encode()
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(txt)))
+		bytes = append(bytes, txt...)
 	default:
 		return nil, fmt.Errorf("type: %v", rr.Type)
 	}
@@ -767,4 +788,18 @@ type MX struct {
 
 func (mx MX) String() string {
 	return fmt.Sprint(mx.Preference, " ", mx.Exchange)
+}
+
+type TXT string
+
+func newTxt(fields []string) TXT {
+	return TXT(strings.Join(fields, "\x00"))
+}
+
+func (txt TXT) encode() ([]byte, error) {
+	return encodeTexts(strings.Split(string(txt), "\x00"))
+}
+
+func (txt TXT) String() string {
+	return strings.ReplaceAll(string(txt), "\x00", " ")
 }

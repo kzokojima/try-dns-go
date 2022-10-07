@@ -116,8 +116,8 @@ func ReadZonefile(path string) (*Zone, error) {
 				// TODO
 				continue
 			} else if fields[0] == "TXT" {
-				// TODO
-				continue
+				type_ = TypeTXT
+				rdata = newTxt(fields[1:])
 			} else if fields[0] == "AAAA" {
 				// TODO
 				continue

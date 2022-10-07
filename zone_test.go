@@ -40,4 +40,10 @@ func TestReadZonefile(t *testing.T) {
 	if expected != zone.Records[6] {
 		t.Error(zone.Records[6])
 	}
+
+	// TXT record
+	expected = ResourceRecord{"example.com.", TypeTXT, ClassIN, 3600, TXT("foo\x00bar")}
+	if expected != zone.Records[8] {
+		t.Error(zone.Records[8])
+	}
 }
