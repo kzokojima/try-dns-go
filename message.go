@@ -525,6 +525,14 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		}
 		binary.BigEndian.PutUint16(bytes[l+8:], uint16(4))
 		bytes = append(bytes, addr.AsSlice()...)
+	case TypeNS:
+		ns := rr.RData.(NS)
+		name, err := encodeName(ns)
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(uint16(len(name))))
+		bytes = append(bytes, name...)
 	case TypeMX:
 		mx := rr.RData.(MX)
 		name, err := encodeName(Name(mx.Exchange))
@@ -575,7 +583,7 @@ type Response struct {
 	QueryTime                 time.Duration
 }
 
-func MakeResponse(request Request, rrs []ResourceRecord) (*Response, error) {
+func MakeResponse(request Request, answers []ResourceRecord, authorities []ResourceRecord) (*Response, error) {
 	reqHeader := request.Header
 	resHeader := Header{
 		ID: reqHeader.ID,
@@ -583,13 +591,14 @@ func MakeResponse(request Request, rrs []ResourceRecord) (*Response, error) {
 			reqHeader.Opcode()<<11 | // OPCODE
 			0, // RCODE
 		QDCount: 1,
-		ANCount: uint16(len(rrs)),
+		ANCount: uint16(len(answers)),
+		NSCount: uint16(len(authorities)),
 	}
 	res := Response{
 		resHeader,
 		request.Question,
-		rrs,
-		nil,
+		answers,
+		authorities,
 		nil,
 		0,
 		0,
@@ -623,6 +632,13 @@ func (res *Response) Bytes() ([]byte, error) {
 	bytes = append(bytes, res.Header.Bytes()...)
 	bytes = append(bytes, questionBytes...)
 	for _, rr := range res.AnswerResourceRecords {
+		rrBytes, err := rr.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		bytes = append(bytes, rrBytes...)
+	}
+	for _, rr := range res.AuthorityResourceRecords {
 		rrBytes, err := rr.Bytes()
 		if err != nil {
 			return nil, err

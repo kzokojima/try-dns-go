@@ -9,6 +9,8 @@ import (
 	"try/dns"
 )
 
+var nsRecords []dns.ResourceRecord
+
 var rrs map[dns.Question][]dns.ResourceRecord
 
 func loadZonefiles(path string) error {
@@ -25,6 +27,7 @@ func loadZonefiles(path string) error {
 		}
 		rrs[key] = append(rrs[key], v)
 	}
+	nsRecords, _ = rrs[dns.Question{dns.Name(zone.Origin), dns.TypeNS, dns.ClassIN}]
 	return nil
 }
 
@@ -38,7 +41,7 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
 	}
 
 	if rrs, ok := rrs[request.Question]; ok {
-		res, err := dns.MakeResponse(*request, rrs)
+		res, err := dns.MakeResponse(*request, rrs, nsRecords)
 		if err != nil {
 			log.Print("[error] ", err)
 			goto Error
