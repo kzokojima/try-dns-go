@@ -286,6 +286,7 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 }
 
 type rrType uint16
+type Type = rrType
 
 const (
 	TypeA    rrType = 1
@@ -308,6 +309,7 @@ func readType(data []byte, current int) (field, int, error) {
 }
 
 type class uint16
+type Class = class
 
 const (
 	ClassIN class = 1
@@ -612,7 +614,7 @@ type Response struct {
 	QueryTime                 time.Duration
 }
 
-func MakeResponse(request Request, answers []ResourceRecord, authorities []ResourceRecord) (*Response, error) {
+func MakeResponse(request Request, answers []ResourceRecord, authorities []ResourceRecord, additionals []ResourceRecord) (*Response, error) {
 	reqHeader := request.Header
 	resHeader := Header{
 		ID: reqHeader.ID,
@@ -622,13 +624,14 @@ func MakeResponse(request Request, answers []ResourceRecord, authorities []Resou
 		QDCount: 1,
 		ANCount: uint16(len(answers)),
 		NSCount: uint16(len(authorities)),
+		ARCount: uint16(len(additionals)),
 	}
 	res := Response{
 		resHeader,
 		request.Question,
 		answers,
 		authorities,
-		nil,
+		additionals,
 		0,
 		0,
 	}
@@ -668,6 +671,13 @@ func (res *Response) Bytes() ([]byte, error) {
 		bytes = append(bytes, rrBytes...)
 	}
 	for _, rr := range res.AuthorityResourceRecords {
+		rrBytes, err := rr.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		bytes = append(bytes, rrBytes...)
+	}
+	for _, rr := range res.AdditionalResourceRecords {
 		rrBytes, err := rr.Bytes()
 		if err != nil {
 			return nil, err

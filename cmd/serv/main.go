@@ -9,12 +9,12 @@ import (
 	"try/dns"
 )
 
-var nsRecords []dns.ResourceRecord
+var zoneAuthorities []dns.ResourceRecord
 
-var rrs map[dns.Question][]dns.ResourceRecord
+var zoneResourceRecords map[dns.Question][]dns.ResourceRecord
 
 func loadZonefiles(path string) error {
-	rrs = make(map[dns.Question][]dns.ResourceRecord)
+	zoneResourceRecords = make(map[dns.Question][]dns.ResourceRecord)
 
 	zone, err := dns.ReadZonefile(path)
 	if err != nil {
@@ -22,13 +22,39 @@ func loadZonefiles(path string) error {
 	}
 	for _, v := range zone.Records {
 		key := dns.Question{Name: v.Name, Type: v.Type, Class: v.Class}
-		if _, ok := rrs[key]; !ok {
-			rrs[key] = make([]dns.ResourceRecord, 0)
+		if _, ok := zoneResourceRecords[key]; !ok {
+			zoneResourceRecords[key] = make([]dns.ResourceRecord, 0)
 		}
-		rrs[key] = append(rrs[key], v)
+		zoneResourceRecords[key] = append(zoneResourceRecords[key], v)
 	}
-	nsRecords = rrs[dns.Question{Name: dns.Name(zone.Origin), Type: dns.TypeNS, Class: dns.ClassIN}]
+	zoneAuthorities = findResourceRecords(zone.Origin, dns.TypeNS, dns.ClassIN)
 	return nil
+}
+
+func findResourceRecords(name string, type_ dns.Type, class dns.Class) []dns.ResourceRecord {
+	key := dns.Question{Name: dns.Name(name), Type: type_, Class: class}
+	if result, ok := zoneResourceRecords[key]; ok {
+		return result
+	} else {
+		return nil
+	}
+}
+
+func getAdditionals(answers []dns.ResourceRecord) []dns.ResourceRecord {
+	var results []dns.ResourceRecord
+	for _, answer := range answers {
+		if answer.Type == dns.TypeMX {
+			additionals := findResourceRecords(answer.RData.(dns.MX).Exchange, dns.TypeA, dns.ClassIN)
+			results = append(results, additionals...)
+		}
+	}
+	for _, answer := range answers {
+		if answer.Type == dns.TypeMX {
+			additionals := findResourceRecords(answer.RData.(dns.MX).Exchange, dns.TypeAAAA, dns.ClassIN)
+			results = append(results, additionals...)
+		}
+	}
+	return results
 }
 
 func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
@@ -40,8 +66,9 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
 		goto Error
 	}
 
-	if rrs, ok := rrs[request.Question]; ok {
-		res, err := dns.MakeResponse(*request, rrs, nsRecords)
+	if answers, ok := zoneResourceRecords[request.Question]; ok {
+		additionals := getAdditionals(answers)
+		res, err := dns.MakeResponse(*request, answers, zoneAuthorities, additionals)
 		if err != nil {
 			log.Print("[error] ", err)
 			goto Error
