@@ -1,4 +1,4 @@
-# DNS lookup utility
+# DNS programs
 
 ## Build
 
@@ -14,6 +14,8 @@ $ ./test.sh
 
 ## Run
 
+### lookup
+
 ```
 $ bin/lookup example.com A
 $ bin/lookup www.example.com A
@@ -23,6 +25,19 @@ $ bin/lookup example.com TXT
 $ bin/lookup example.com AAAA
 $ bin/lookup -x 1.1.1.1
 $ bin/lookup -x 2606:4700:4700::1111
+```
+
+### Authoritative name server
+
+```
+# start server
+$ bin/serv testdata/zones/example.com.zone 0.0.0.0:8053 &
+
+# lookup
+$ dig @127.0.0.1 -p 8053 example.com
+
+# stop server
+$ pkill -f 0.0.0.0:8053
 ```
 
 ## Develop
