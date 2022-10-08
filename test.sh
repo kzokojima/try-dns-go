@@ -57,7 +57,7 @@ test_serv() {
     bin/serv testdata/zones/example.com.zone 0.0.0.0:${DNS_PORT} 2> /dev/null &
 
     # TODO: for each in test/*.sh ; do
-    for each in test/example.com*.sh test/www.example.com*.sh ; do
+    for each in test/*example.com*.sh ; do
         if source $each; then
             echo -e "ok\t${FUNCNAME[0]}\t$each"
         else
