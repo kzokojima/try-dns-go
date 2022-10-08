@@ -289,11 +289,12 @@ type rrType uint16
 type Type = rrType
 
 const (
-	TypeA    rrType = 1
-	TypeNS   rrType = 2
-	TypeMX   rrType = 15
-	TypeTXT  rrType = 16
-	TypeAAAA rrType = 28
+	TypeA     rrType = 1
+	TypeNS    rrType = 2
+	TypeCNAME rrType = 5
+	TypeMX    rrType = 15
+	TypeTXT   rrType = 16
+	TypeAAAA  rrType = 28
 )
 
 func (t rrType) String() string {
@@ -550,6 +551,14 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		}
 		binary.BigEndian.PutUint16(bytes[l+8:], uint16(uint16(len(name))))
 		bytes = append(bytes, name...)
+	case TypeCNAME:
+		cname := rr.RData.(CNAME)
+		name, err := encodeName(cname)
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(uint16(len(name))))
+		bytes = append(bytes, name...)
 	case TypeMX:
 		mx := rr.RData.(MX)
 		name, err := encodeName(Name(mx.Exchange))
@@ -798,6 +807,8 @@ func parseMessage(msg []byte) (*message, error) {
 type A = netip.Addr
 
 type NS = Name
+
+type CNAME = Name
 
 type MX struct {
 	Preference int

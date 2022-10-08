@@ -79,7 +79,25 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
 			goto Error
 		}
 	} else {
-		goto Error
+		// CNAME
+		answers := findResourceRecords(string(request.Question.Name), dns.TypeCNAME, dns.ClassIN)
+		if len(answers) == 1 {
+			cname := answers[0]
+			additionals := findResourceRecords(string(cname.RData.(dns.CNAME)), request.Question.Type, dns.ClassIN)
+			answers = append(answers, additionals...)
+			res, err := dns.MakeResponse(*request, answers, zoneAuthorities, nil)
+			if err != nil {
+				log.Print("[error] ", err)
+				goto Error
+			}
+			bytes, err = res.Bytes()
+			if err != nil {
+				log.Print("[error] ", err)
+				goto Error
+			}
+		} else {
+			goto Error
+		}
 	}
 
 End:

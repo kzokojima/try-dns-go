@@ -112,9 +112,15 @@ func ReadZonefile(path string) (*Zone, error) {
 				}
 				type_ = TypeNS
 				rdata = NS(name)
-			} else if fields[0] == "CNAME" {
-				// TODO
-				continue
+			} else if fields[0] == "CNAME" && len(fields) == 2 {
+				name := fields[1]
+				if name == "@" {
+					name = zone.Origin
+				} else if !strings.HasSuffix(name, ".") {
+					name = fields[1] + "." + zone.Origin
+				}
+				type_ = TypeCNAME
+				rdata = CNAME(name)
 			} else if fields[0] == "TXT" {
 				type_ = TypeTXT
 				rdata = newTxt(fields[1:])
