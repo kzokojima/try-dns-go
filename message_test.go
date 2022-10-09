@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"bytes"
 	"net/netip"
 	"strings"
 	"testing"
@@ -61,7 +62,7 @@ func TestResponseBytes(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if len(bytes) != 341 {
+		if len(bytes) != 193 {
 			t.Error(len(bytes))
 		}
 	}
@@ -83,7 +84,7 @@ func TestResponseBytes(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if len(bytes) != 207 {
+		if len(bytes) != 115 {
 			t.Error(len(bytes))
 		}
 	}
@@ -126,5 +127,29 @@ func TestEncodeTexts(t *testing.T) {
 	_, err = encodeTexts(texts)
 	if err == nil {
 		t.Error("Validation error")
+	}
+}
+
+func TestEncodeName(t *testing.T) {
+	data := []struct {
+		name     string
+		msg      []byte
+		expected []byte
+	}{
+		{"example.com.", nil, []byte("\x07example\x03com\x00")},
+		{"example.com.", []byte("\x07example\x03com\x00"), []byte("\xC0\x00")},
+		{"example.com.", []byte("\x03www\x07example\x03com\x00"), []byte("\xC0\x04")},
+		{"mx1.example.com.", []byte("\x07example\x03com\x00"), []byte("\x03mx1\xC0\x00")},
+		{"mx1.example.com.", []byte("\x07example\x03com\x00\x03mx1\xC0\x00"), []byte("\xC0\x0D")},
+	}
+
+	for _, v := range data {
+		encoded, err := encodeName(v.name, v.msg)
+		if err != nil {
+			t.Error(v, err)
+		}
+		if !bytes.Equal(encoded, v.expected) {
+			t.Error(v, encoded)
+		}
 	}
 }

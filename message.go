@@ -144,12 +144,53 @@ func (n Name) String() string {
 	return string(n)
 }
 
-func encodeName(in Name) ([]byte, error) {
-	name := string(in)
+func encodeName(name string, msg []byte) ([]byte, error) {
 	name = strings.TrimRight(name, ".")
 	if DOMAIN_NAME_LEN_MAX < len(name) {
 		return nil, fmt.Errorf("%s length", name)
 	}
+
+	if len(msg) != 0 {
+		// message compression
+
+		// search for FQDN
+		encoded, err := encodeName(name, nil)
+		if err != nil {
+			return nil, err
+		}
+		if i := bytes.Index(msg, encoded); i != -1 {
+			// simple match
+			return []byte{0xC0 | byte(i>>8), byte(i & 0xFF)}, nil
+		}
+
+		fields := strings.SplitN(name, ".", 2)
+		if len(fields) == 2 {
+			lavel0, err := encodeName(fields[0], nil)
+			if err != nil {
+				return nil, err
+			}
+			lavel0 = lavel0[:len(lavel0)-1] // trim null character
+
+			// search for lavel0 + lavel1 pointer
+			lavel1, err := encodeName(fields[1], nil)
+			if err != nil {
+				return nil, err
+			}
+			if i := bytes.Index(msg, lavel1); i != -1 {
+				search := append(lavel0, 0xC0|byte(i>>8), byte(i&0xFF))
+				if i := bytes.Index(msg, search); i != -1 {
+					return []byte{0xC0 | byte(i>>8), byte(i & 0xFF)}, nil
+				}
+			}
+
+			lavel1, err = encodeName(fields[1], msg)
+			if err != nil {
+				return nil, err
+			}
+			return append(lavel0, lavel1...), nil
+		}
+	}
+
 	buf := new(bytes.Buffer)
 	labels := strings.Split(name, ".")
 	for _, label := range labels {
@@ -348,7 +389,7 @@ func readRdlength(data []byte, current int) (field, int, error) {
 }
 
 func (q *Question) Bytes() ([]byte, error) {
-	encoded, err := encodeName(q.Name)
+	encoded, err := encodeName(q.Name.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -524,8 +565,8 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 	}
 }
 
-func (rr ResourceRecord) Bytes() ([]byte, error) {
-	encoded, err := encodeName(rr.Name)
+func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
+	encoded, err := encodeName(rr.Name.String(), msg)
 	if err != nil {
 		return nil, err
 	}
@@ -545,7 +586,7 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		bytes = append(bytes, addr.AsSlice()...)
 	case TypeNS:
 		ns := rr.RData.(NS)
-		name, err := encodeName(ns)
+		name, err := encodeName(ns.String(), msg)
 		if err != nil {
 			return nil, err
 		}
@@ -553,7 +594,7 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		bytes = append(bytes, name...)
 	case TypeCNAME:
 		cname := rr.RData.(CNAME)
-		name, err := encodeName(cname)
+		name, err := encodeName(cname.String(), msg)
 		if err != nil {
 			return nil, err
 		}
@@ -561,7 +602,7 @@ func (rr ResourceRecord) Bytes() ([]byte, error) {
 		bytes = append(bytes, name...)
 	case TypeMX:
 		mx := rr.RData.(MX)
-		name, err := encodeName(Name(mx.Exchange))
+		name, err := encodeName(mx.Exchange, msg)
 		if err != nil {
 			return nil, err
 		}
@@ -673,21 +714,21 @@ func (res *Response) Bytes() ([]byte, error) {
 	bytes = append(bytes, res.Header.Bytes()...)
 	bytes = append(bytes, questionBytes...)
 	for _, rr := range res.AnswerResourceRecords {
-		rrBytes, err := rr.Bytes()
+		rrBytes, err := rr.Bytes(bytes)
 		if err != nil {
 			return nil, err
 		}
 		bytes = append(bytes, rrBytes...)
 	}
 	for _, rr := range res.AuthorityResourceRecords {
-		rrBytes, err := rr.Bytes()
+		rrBytes, err := rr.Bytes(bytes)
 		if err != nil {
 			return nil, err
 		}
 		bytes = append(bytes, rrBytes...)
 	}
 	for _, rr := range res.AdditionalResourceRecords {
-		rrBytes, err := rr.Bytes()
+		rrBytes, err := rr.Bytes(bytes)
 		if err != nil {
 			return nil, err
 		}
