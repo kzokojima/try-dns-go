@@ -64,6 +64,7 @@ type opts struct {
 	short   bool
 	tcp     bool
 	rec     bool
+	raw     bool
 }
 
 func getOpts(args []string) (*opts, error) {
@@ -92,6 +93,8 @@ func getOpts(args []string) (*opts, error) {
 				opts.tcp = true
 			case "+norec":
 				opts.rec = false
+			case "+raw":
+				opts.raw = true
 			default:
 				return nil, fmt.Errorf("invalid arg: %v", args[i])
 			}
@@ -232,14 +235,18 @@ func main() {
 	if err != nil {
 		die(err)
 	}
-	query_time := time.Since(time_sent)
-	if opts.tcp {
-		resMsg = resMsg[2:]
+	if opts.raw {
+		os.Stdout.Write(resMsg)
+	} else {
+		query_time := time.Since(time_sent)
+		if opts.tcp {
+			resMsg = resMsg[2:]
+		}
+		res, err := dns.ParseResMsg(resMsg)
+		if err != nil {
+			die(err)
+		}
+		res.QueryTime = query_time
+		print(res, opts)
 	}
-	res, err := dns.ParseResMsg(resMsg)
-	if err != nil {
-		die(err)
-	}
-	res.QueryTime = query_time
-	print(res, opts)
 }
