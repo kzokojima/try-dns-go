@@ -68,7 +68,7 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
 
 	if answers, ok := zoneResourceRecords[request.Question]; ok {
 		additionals := getAdditionals(answers)
-		res, err := dns.MakeResponse(*request, answers, zoneAuthorities, additionals)
+		res, err := dns.MakeResponse(request.Header, request.Question, answers, zoneAuthorities, additionals)
 		if err != nil {
 			log.Print("[error] ", err)
 			goto Error
@@ -85,7 +85,7 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte) {
 			cname := answers[0]
 			additionals := findResourceRecords(string(cname.RData.(dns.CNAME)), request.Question.Type, dns.ClassIN)
 			answers = append(answers, additionals...)
-			res, err := dns.MakeResponse(*request, answers, zoneAuthorities, nil)
+			res, err := dns.MakeResponse(request.Header, request.Question, answers, zoneAuthorities, nil)
 			if err != nil {
 				log.Print("[error] ", err)
 				goto Error

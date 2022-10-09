@@ -623,8 +623,8 @@ type Response struct {
 	QueryTime                 time.Duration
 }
 
-func MakeResponse(request Request, answers []ResourceRecord, authorities []ResourceRecord, additionals []ResourceRecord) (*Response, error) {
-	reqHeader := request.Header
+func MakeResponse(reqHeader Header, question Question,
+	answers []ResourceRecord, authorities []ResourceRecord, additionals []ResourceRecord) (*Response, error) {
 	resHeader := Header{
 		ID: reqHeader.ID,
 		Fields: 1<<15 | // QR
@@ -637,7 +637,7 @@ func MakeResponse(request Request, answers []ResourceRecord, authorities []Resou
 	}
 	res := Response{
 		resHeader,
-		request.Question,
+		question,
 		answers,
 		authorities,
 		additionals,
