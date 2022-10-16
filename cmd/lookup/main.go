@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/netip"
 	"os"
 	"strings"
@@ -13,23 +11,6 @@ import (
 
 	"try/dns"
 )
-
-func request(network string, address string, data []byte) ([]byte, error) {
-	var buf [dns.UDP_SIZE]byte
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		return nil, err
-	}
-	_, err = conn.Write(data)
-	if err != nil {
-		return nil, err
-	}
-	len, err := conn.Read(buf[:])
-	if err != nil {
-		return nil, err
-	}
-	return buf[:len], nil
-}
 
 func arpaName(ipaddr string) (string, error) {
 	parts := strings.Split(ipaddr, ".")
@@ -220,18 +201,13 @@ func main() {
 			die(err)
 		}
 	}
-	reqMsg, err := dns.MakeReqMsg(opts.name, opts.type_, opts.rec)
-	if err != nil {
-		die(err)
-	}
 	network := "udp"
 	if opts.tcp {
 		network = "tcp"
-		reqMsg = append([]byte{0, 0}, reqMsg...)
-		binary.BigEndian.PutUint16(reqMsg, uint16(len(reqMsg)-2))
 	}
+	client := dns.Client{}
 	time_sent := time.Now()
-	resMsg, err := request(network, opts.server+":"+opts.port, reqMsg)
+	resMsg, err := client.Do(network, opts.server+":"+opts.port, opts.name, opts.type_, opts.rec)
 	if err != nil {
 		die(err)
 	}

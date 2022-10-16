@@ -27,11 +27,24 @@ $ bin/lookup -x 1.1.1.1
 $ bin/lookup -x 2606:4700:4700::1111
 ```
 
-### Authoritative name server
+### Authoritative server
 
 ```
 # start server
-$ bin/serv testdata/zones/example.com.zone 0.0.0.0:8053 &
+$ bin/serv 0.0.0.0:8053 testdata/zones/example.com.zone &
+
+# lookup
+$ dig @127.0.0.1 -p 8053 example.com
+
+# stop server
+$ pkill -f 0.0.0.0:8053
+```
+
+### Recursive resolver
+
+```
+# start server
+$ bin/serv 0.0.0.0:8053 &
 
 # lookup
 $ dig @127.0.0.1 -p 8053 example.com

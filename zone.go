@@ -99,7 +99,7 @@ func ReadZonefile(path string) (*Zone, error) {
 				}
 				type_ = TypeMX
 				rdata = MX{
-					preference,
+					uint16(preference),
 					exchange,
 				}
 			} else if fields[0] == "SOA" {

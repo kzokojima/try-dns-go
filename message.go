@@ -145,6 +145,10 @@ func (n Name) String() string {
 }
 
 func encodeName(name string, msg []byte) ([]byte, error) {
+	if name == "." {
+		return []byte{0}, nil
+	}
+
 	name = strings.TrimRight(name, ".")
 	if DOMAIN_NAME_LEN_MAX < len(name) {
 		return nil, fmt.Errorf("%s length", name)
@@ -330,12 +334,19 @@ type rrType uint16
 type Type = rrType
 
 const (
-	TypeA     rrType = 1
-	TypeNS    rrType = 2
-	TypeCNAME rrType = 5
-	TypeMX    rrType = 15
-	TypeTXT   rrType = 16
-	TypeAAAA  rrType = 28
+	TypeA      rrType = 1
+	TypeNS     rrType = 2
+	TypeCNAME  rrType = 5
+	TypeSOA    rrType = 6
+	TypePTR    rrType = 12
+	TypeMX     rrType = 15
+	TypeTXT    rrType = 16
+	TypeAAAA   rrType = 28
+	TypeOPT    rrType = 41
+	TypeDS     rrType = 43
+	TypeRRSIG  rrType = 46
+	TypeNSEC   rrType = 47
+	TypeDNSKEY rrType = 48
 )
 
 func (t rrType) String() string {
@@ -437,26 +448,31 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		class := fields[2].(class)
 		ttl := fields[3].(TTL)
 		rdlength := fields[4].(rdlength)
+		var rdata RData
 
 		// rddata
-		switch type_ := type_.String(); true {
-		case (type_ == "A" && rdlength == 4) || (type_ == "AAAA" && rdlength == 16):
+		switch type_ {
+		case TypeA:
 			ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
-			val = ip.String()
-		case type_ == "NS" || type_ == "CNAME" || type_ == "PTR":
+			rdata = ip
+		case TypeAAAA:
+			ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
+			rdata = AAAA(ip)
+		case TypeNS, TypeCNAME, TypePTR:
 			decoded, _, err := decodeName(data, current)
 			if err != nil {
 				return nil, 0, err
 			}
 			val = decoded.String()
-		case type_ == "MX":
+			rdata = Name(val)
+		case TypeMX:
 			preference := binary.BigEndian.Uint16(data[current:])
 			exchange, _, err := decodeName(data, current+2)
 			if err != nil {
 				return nil, 0, err
 			}
-			val = fmt.Sprintf("%v %v", preference, exchange)
-		case type_ == "SOA":
+			rdata = MX{preference, exchange.String()}
+		case TypeSOA:
 			mname, next, err := decodeName(data, current)
 			if err != nil {
 				return nil, 0, err
@@ -470,20 +486,20 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 			retry := binary.BigEndian.Uint32(data[next+8:])
 			expire := binary.BigEndian.Uint32(data[next+12:])
 			minimum := binary.BigEndian.Uint32(data[next+16:])
-			val = fmt.Sprintf("%v %v %v %v %v %v %v", mname, rname, serial, refresh, retry, expire, minimum)
-		case type_ == "TXT":
+			rdata = SOA{mname.String(), rname.String(), serial, refresh, retry, expire, minimum}
+		case TypeTXT:
 			texts := decodeTexts(data, current, current+int(rdlength))
 			for i, v := range texts {
 				texts[i] = fmt.Sprintf("%q", v)
 			}
-			val = strings.Join(texts, " ")
-		case type_ == "DS":
+			rdata = newTxt(texts)
+		case TypeDS:
 			keyTag := binary.BigEndian.Uint16(data[current:])
 			algo := data[current+2]
 			digestType := data[current+3]
 			digest := data[current+4 : current+int(rdlength)]
-			val = fmt.Sprintf("%v %v %v %X", keyTag, algo, digestType, digest)
-		case type_ == "RRSIG":
+			rdata = DS{keyTag, algo, digestType, digest}
+		case TypeRRSIG:
 			typeCovered, _, _ := readType(data, current)
 			algo := data[current+2]
 			labels := data[current+3]
@@ -498,11 +514,10 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 			signerName := decoded.String()
 			signature := data[next : current+int(rdlength)]
 			const LAYOUT = "20060102150405"
-			val = fmt.Sprintf("%v %v %v %v %v %v %v %v %v",
-				typeCovered.String(), algo, labels, originalTtl,
+			rdata = RRSIG{typeCovered.String(), algo, labels, originalTtl,
 				signatureExpiration.Format(LAYOUT), signatureInception.Format(LAYOUT),
-				keyTag, signerName, base64.StdEncoding.EncodeToString(signature))
-		case type_ == "NSEC":
+				keyTag, signerName, base64.StdEncoding.EncodeToString(signature)}
+		case TypeNSEC:
 			decoded, next, err := decodeName(data, current)
 			if err != nil {
 				return nil, 0, err
@@ -524,8 +539,8 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 					}
 				}
 			}
-			val = fmt.Sprintf("%v %v", nextDomainName, strings.Join(typeTexts, " "))
-		case type_ == "DNSKEY":
+			rdata = NSEC{nextDomainName, strings.Join(typeTexts, " ")}
+		case TypeDNSKEY:
 			flags := binary.BigEndian.Uint16(data[current:])
 			proto := data[current+2]
 			if proto != 3 {
@@ -533,9 +548,9 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 			}
 			algo := data[current+3]
 			key := data[current+4 : current+int(rdlength)]
-			val = fmt.Sprintf("%v %v %v %v", flags, proto, algo, base64.StdEncoding.EncodeToString(key))
+			rdata = DNSKEY{flags, proto, algo, base64.StdEncoding.EncodeToString(key)}
 		default:
-			val = fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength)
+			rdata = RDataStr(fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength))
 		}
 		current += int(rdlength)
 
@@ -544,7 +559,7 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 			type_,
 			class,
 			ttl,
-			RDataStr(val),
+			rdata,
 		}, current, nil
 	} else { // OPT
 		fields, _, err := readFields(data, current+1, readType, readClass, readTtl, readRdlength)
@@ -624,6 +639,8 @@ func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
 		}
 		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(aaaa)))
 		bytes = append(bytes, aaaa...)
+	case TypeOPT:
+		return []byte{}, nil
 	default:
 		return nil, fmt.Errorf("type: %v", rr.Type)
 	}
@@ -851,8 +868,22 @@ type NS = Name
 
 type CNAME = Name
 
+type SOA struct {
+	mname   string
+	rname   string
+	serial  uint32
+	refresh uint32
+	retry   uint32
+	expire  uint32
+	minimum uint32
+}
+
+func (soa SOA) String() string {
+	return fmt.Sprintf("%v %v %v %v %v %v %v", soa.mname, soa.rname, soa.serial, soa.refresh, soa.retry, soa.expire, soa.minimum)
+}
+
 type MX struct {
-	Preference int
+	Preference uint16
 	Exchange   string
 }
 
@@ -894,4 +925,54 @@ func (aaaa AAAA) encode() ([]byte, error) {
 
 func (aaaa AAAA) String() string {
 	return netip.Addr(aaaa).String()
+}
+
+type DS struct {
+	keyTag     uint16
+	algo       byte
+	digestType byte
+	digest     []byte
+}
+
+func (ds DS) String() string {
+	return fmt.Sprintf("%v %v %v %X", ds.keyTag, ds.algo, ds.digestType, ds.digest)
+}
+
+type RRSIG struct {
+	typeCovered         string
+	algo                byte
+	labels              byte
+	originalTtl         uint32
+	signatureExpiration string
+	signatureInception  string
+	keyTag              uint16
+	signerName          string
+	signature           string
+}
+
+func (rrsig RRSIG) String() string {
+	return fmt.Sprintf("%v %v %v %v %v %v %v %v %v",
+		rrsig.typeCovered, rrsig.algo, rrsig.labels, rrsig.originalTtl,
+		rrsig.signatureExpiration, rrsig.signatureInception,
+		rrsig.keyTag, rrsig.signerName, rrsig.signature)
+}
+
+type NSEC struct {
+	nextDomainName string
+	typeTexts      string
+}
+
+func (nsec NSEC) String() string {
+	return fmt.Sprintf("%v %v", nsec.nextDomainName, nsec.typeTexts)
+}
+
+type DNSKEY struct {
+	flags uint16
+	proto byte
+	algo  byte
+	key   string
+}
+
+func (dnskey DNSKEY) String() string {
+	return fmt.Sprintf("%v %v %v %v", dnskey.flags, dnskey.proto, dnskey.algo, dnskey.key)
 }

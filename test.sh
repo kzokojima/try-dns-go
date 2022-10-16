@@ -17,7 +17,7 @@ handle_error() {
 }
 
 assert_equals() {
-    diff --ignore-space-change <(echo "$1") <(echo "$2")
+    diff --ignore-blank-lines --ignore-space-change <(echo "$1") <(echo "$2")
 }
 
 test_go() {
@@ -51,13 +51,31 @@ test_lookup() {
     docker compose down 2> /dev/null
 }
 
-test_serv() {
+test_authoritative_server() {
     local CMD="dig @127.0.0.1 -p ${DNS_PORT}"
 
-    bin/serv testdata/zones/example.com.zone 0.0.0.0:${DNS_PORT} 2> /dev/null &
+    bin/serv 0.0.0.0:${DNS_PORT} testdata/zones/example.com.zone 2> /dev/null &
 
     # TODO: for each in test/*.sh ; do
     for each in test/*example.com*.sh ; do
+        if source $each; then
+            echo -e "ok\t${FUNCNAME[0]}\t$each"
+        else
+            echo -e "FAIL\t${FUNCNAME[0]}\t$each"
+            status=1
+            ((++fails))
+        fi
+    done
+
+    pkill -f 0.0.0.0:${DNS_PORT}
+}
+
+test_recursive_resolver() {
+    local CMD="dig @127.0.0.1 -p ${DNS_PORT}"
+
+    bin/serv 0.0.0.0:${DNS_PORT} 2> /dev/null &
+
+    for each in test/recursive_resolver/*.sh ; do
         if source $each; then
             echo -e "ok\t${FUNCNAME[0]}\t$each"
         else
@@ -75,7 +93,8 @@ fails=0
 test_go
 ./build.sh
 test_lookup
-test_serv
+test_authoritative_server
+test_recursive_resolver
 if [[ $status = 0 ]]; then
     echo OK
 else
