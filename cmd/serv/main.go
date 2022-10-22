@@ -141,8 +141,75 @@ var rootServers = []dns.ResourceRecord{
 	{Name: "m.root-servers.net.", Type: dns.TypeAAAA, Class: dns.ClassIN, TTL: 3600000, RData: dns.AAAA(netip.MustParseAddr("2001:dc3::35"))},
 }
 
+// a.root-servers.net
+var rootServer = "198.41.0.4"
+
+func recursiveResolve(name string, type_ string, client *dns.Client) ([]dns.ResourceRecord, error) {
+	log.Printf("[debug] recursiveResolve: %v %v", name, type_)
+	nameServer := rootServer
+	if client == nil {
+		client = &dns.Client{Limit: 20}
+	}
+
+	for {
+		log.Printf("[debug] recursiveResolve: nameServer: @%v %v %v", nameServer, name, type_)
+		resMsg, err := client.Do("udp", nameServer+":53", name, type_, false, false)
+		if err != nil {
+			return nil, err
+		}
+		res, err := dns.ParseResMsg(resMsg)
+		if err != nil {
+			return nil, err
+		}
+		if len(res.AnswerResourceRecords) != 0 {
+			return res.AnswerResourceRecords, nil
+		}
+		if len(res.AdditionalResourceRecords) != 0 {
+			var founds []dns.ResourceRecord
+			for _, adrr := range res.AdditionalResourceRecords {
+				if adrr.Name.String() == name && adrr.Type.String() == type_ {
+					founds = append(founds, adrr)
+				}
+			}
+			if founds != nil {
+				return founds, nil
+			}
+		}
+		if len(res.AuthorityResourceRecords) != 0 {
+			nsname := res.AuthorityResourceRecords[0].RData.String()
+			log.Printf("[debug] recursiveResolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
+			if len(res.AdditionalResourceRecords) != 0 {
+				var found *dns.ResourceRecord
+				for _, adrr := range res.AdditionalResourceRecords {
+					if nsname == adrr.Name.String() && adrr.Type == dns.TypeA {
+						found = &adrr
+						break
+					}
+				}
+				if found != nil {
+					log.Printf("[debug] recursiveResolve: found: %v", found)
+					nameServer = found.RData.String()
+					continue
+				}
+			}
+
+			rrs, err := recursiveResolve(nsname, "A", client)
+			if err != nil {
+				return nil, err
+			}
+			if len(rrs) == 0 {
+				return nil, fmt.Errorf("ERR")
+			}
+			nameServer = rrs[0].RData.String()
+		} else {
+			return nil, fmt.Errorf("ERR")
+		}
+	}
+}
+
 func recursiveResolver(req dns.Request) ([]byte, error) {
 	if req.Question.Name == "." && req.Question.Type == dns.TypeNS {
+		// root
 		answers := rootServerNSRRs
 		additionals := rootServers
 		res, err := dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
@@ -154,30 +221,22 @@ func recursiveResolver(req dns.Request) ([]byte, error) {
 			return nil, err
 		}
 		return bytes, nil
-	} else if req.Question.Name == "com." && req.Question.Type == dns.TypeNS {
-		client := dns.Client{}
-		resMsg, err := client.Do("udp", "198.41.0.4:53", req.Question.Name.String(), req.Question.Type.String(), false)
-		if err != nil {
-			return nil, err
-		}
-		res, err := dns.ParseResMsg(resMsg)
-		if err != nil {
-			return nil, err
-		}
-		res.Header.ID = req.Header.ID
-		res.AnswerResourceRecords = res.AuthorityResourceRecords
-		res.Header.ANCount = uint16(len(res.AnswerResourceRecords))
-		res.AuthorityResourceRecords = nil
-		res.Header.NSCount = 0
-		res.AdditionalResourceRecords = nil
-		res.Header.ARCount = 0
-		bytes, err := res.Bytes()
-		if err != nil {
-			return nil, err
-		}
-		return bytes, nil
 	}
-	return nil, fmt.Errorf("TODO")
+
+	rrs, err := recursiveResolve(req.Question.Name.String(), req.Question.Type.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("ERR1")
+	}
+	answers := rrs
+	res, err := dns.MakeResponse(req.Header, req.Question, answers, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	bytes, err := res.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
 }
 
 func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFunc) {

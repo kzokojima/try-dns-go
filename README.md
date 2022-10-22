@@ -85,3 +85,4 @@ $ go run ./cmd/lookup @127.0.0.1 -p 8053 example.com
 * [RFC 6891 Extension Mechanisms for DNS (EDNS(0))](https://www.rfc-editor.org/info/rfc6891)
 * [JPRS DNS関連技術情報#DNS関連のRFC](https://jprs.jp/tech/index.html#dns-rfc-info)
 * [DNSパケットフォーマットと、DNSパケットの作り方](https://atmarkit.itmedia.co.jp/ait/articles/1601/29/news014.html)
+* [教科書には載っていないDNS](https://dnsops.jp/event/20130719/20130719-undocumented-DNS-orange-6.pdf)

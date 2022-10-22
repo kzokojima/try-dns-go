@@ -207,7 +207,7 @@ func main() {
 	}
 	client := dns.Client{}
 	time_sent := time.Now()
-	resMsg, err := client.Do(network, opts.server+":"+opts.port, opts.name, opts.type_, opts.rec)
+	resMsg, err := client.Do(network, opts.server+":"+opts.port, opts.name, opts.type_, opts.rec, true)
 	if err != nil {
 		die(err)
 	}

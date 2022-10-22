@@ -779,28 +779,36 @@ type Request struct {
 	MsgSize                   int
 }
 
-func MakeReqMsg(n string, t string, rd bool) ([]byte, error) {
+func MakeReqMsg(n string, t string, rd bool, edns bool) ([]byte, error) {
 	question := Question{Name(n), typeOf[t], classOf["IN"]}
 	questionBytes, err := question.Bytes()
 	if err != nil {
 		return nil, err
 	}
 	headerFields := map[bool]uint16{false: 0, true: 1 << 8}[rd]
+
+	arcount := uint16(0)
+	arbytes := []byte{}
+	if edns {
+		arcount = 1
+		opt := optResourceRecord{
+			type_: 41,
+			class: UDP_SIZE, // UDP payload size
+		}
+		arbytes = append(arbytes, opt.bytes()...)
+	}
+
 	header := &Header{
 		ID:      uint16(rand.Intn(0x10000)),
 		Fields:  headerFields,
 		QDCount: 1,
-		ARCount: 1,
-	}
-	opt := optResourceRecord{
-		type_: 41,
-		class: UDP_SIZE, // UDP payload size
+		ARCount: arcount,
 	}
 
 	bytes := []byte{}
 	bytes = append(bytes, header.Bytes()...)
 	bytes = append(bytes, questionBytes...)
-	bytes = append(bytes, opt.bytes()...)
+	bytes = append(bytes, arbytes...)
 
 	return bytes, nil
 }

@@ -25,7 +25,7 @@ func TestMakeErrRes(t *testing.T) {
 }
 
 func TestParseRequest(t *testing.T) {
-	reqMsg, err := MakeReqMsg("example.com", "A", true)
+	reqMsg, err := MakeReqMsg("example.com", "A", true, true)
 	if err != nil {
 		t.Error(err)
 	}
