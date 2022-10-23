@@ -171,7 +171,7 @@ func recursiveResolve(name string, type_ string, client *dns.Client) ([]dns.Reso
 					founds = append(founds, adrr)
 				}
 			}
-			if founds != nil {
+			if len(founds) != 0 {
 				return founds, nil
 			}
 		}
