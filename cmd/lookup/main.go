@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"math/rand"
 	"net/netip"
@@ -184,6 +185,18 @@ func print(res *dns.Response, opts *opts) {
 	}
 }
 
+func printBytes(b []byte) {
+	var buf [16]byte
+	reader := bytes.NewReader(b)
+	for {
+		n, err := reader.Read(buf[:])
+		if err != nil {
+			return
+		}
+		fmt.Printf("%x\n", buf[:n])
+	}
+}
+
 func die(err error) {
 	fmt.Fprintln(os.Stderr, "error:", err)
 	os.Exit(1)
@@ -228,6 +241,7 @@ func main() {
 		}
 		res, err := dns.ParseResMsg(resMsg)
 		if err != nil {
+			printBytes(resMsg)
 			die(err)
 		}
 		res.QueryTime = query_time
