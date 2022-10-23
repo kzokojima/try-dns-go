@@ -51,9 +51,12 @@ type opts struct {
 func getOpts(args []string) (*opts, error) {
 	var opts = &opts{
 		port:  "53",
-		type_: "A",
+		name:  ".",
+		type_: "NS",
 		rec:   true,
 	}
+	name_flg := false
+	type_flg := false
 	for i := 0; i < len(args); i++ {
 		switch {
 		case strings.HasPrefix(args[i], "@"):
@@ -66,6 +69,7 @@ func getOpts(args []string) (*opts, error) {
 		case args[i] == "-x":
 			opts.reverse = true
 			opts.type_ = "PTR"
+			type_flg = true
 		case strings.HasPrefix(args[i], "+"):
 			switch args[i] {
 			case "+short":
@@ -79,9 +83,13 @@ func getOpts(args []string) (*opts, error) {
 			default:
 				return nil, fmt.Errorf("invalid arg: %v", args[i])
 			}
-		case len(opts.name) == 0:
+		case !name_flg:
 			opts.name = strings.ToLower(args[i])
-		default:
+			name_flg = true
+			if !type_flg {
+				opts.type_ = "A"
+			}
+		case !type_flg:
 			opts.type_ = strings.ToUpper(args[i])
 		}
 	}

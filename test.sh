@@ -49,6 +49,17 @@ test_lookup() {
     done
 
     docker compose down 2> /dev/null
+
+    CMD="bin/lookup"
+    for each in test/lookup/*.sh ; do
+        if source $each; then
+            echo -e "ok\t${FUNCNAME[0]}\t$each"
+        else
+            echo -e "FAIL\t${FUNCNAME[0]}\t$each"
+            status=1
+            ((++fails))
+        fi
+    done
 }
 
 test_authoritative_server() {

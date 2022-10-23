@@ -436,148 +436,132 @@ type ResourceRecord struct {
 }
 
 func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error) {
-	if data[current] != 0 {
-		var val string
+	var val string
 
-		fields, current, err := readFields(data, current, decodeName, readType, readClass, readTtl, readRdlength)
+	fields, current, err := readFields(data, current, decodeName, readType, readClass, readTtl, readRdlength)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%v, fields: %v", err, fields)
+	}
+	name := fields[0].(Name)
+	type_ := fields[1].(rrType)
+	class := fields[2].(class)
+	ttl := fields[3].(TTL)
+	rdlength := fields[4].(rdlength)
+	var rdata RData
+
+	// rddata
+	switch type_ {
+	case TypeA:
+		ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
+		rdata = ip
+	case TypeAAAA:
+		ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
+		rdata = AAAA(ip)
+	case TypeNS, TypeCNAME, TypePTR:
+		decoded, _, err := decodeName(data, current)
 		if err != nil {
 			return nil, 0, err
 		}
-		name := fields[0].(Name)
-		type_ := fields[1].(rrType)
-		class := fields[2].(class)
-		ttl := fields[3].(TTL)
-		rdlength := fields[4].(rdlength)
-		var rdata RData
-
-		// rddata
-		switch type_ {
-		case TypeA:
-			ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
-			rdata = ip
-		case TypeAAAA:
-			ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
-			rdata = AAAA(ip)
-		case TypeNS, TypeCNAME, TypePTR:
-			decoded, _, err := decodeName(data, current)
-			if err != nil {
-				return nil, 0, err
-			}
-			val = decoded.String()
-			rdata = Name(val)
-		case TypeMX:
-			preference := binary.BigEndian.Uint16(data[current:])
-			exchange, _, err := decodeName(data, current+2)
-			if err != nil {
-				return nil, 0, err
-			}
-			rdata = MX{preference, exchange.String()}
-		case TypeSOA:
-			mname, next, err := decodeName(data, current)
-			if err != nil {
-				return nil, 0, err
-			}
-			rname, next, err := decodeName(data, next)
-			if err != nil {
-				return nil, 0, err
-			}
-			serial := binary.BigEndian.Uint32(data[next:])
-			refresh := binary.BigEndian.Uint32(data[next+4:])
-			retry := binary.BigEndian.Uint32(data[next+8:])
-			expire := binary.BigEndian.Uint32(data[next+12:])
-			minimum := binary.BigEndian.Uint32(data[next+16:])
-			rdata = SOA{mname.String(), rname.String(), serial, refresh, retry, expire, minimum}
-		case TypeTXT:
-			texts := decodeTexts(data, current, current+int(rdlength))
-			for i, v := range texts {
-				texts[i] = fmt.Sprintf("%q", v)
-			}
-			rdata = newTxt(texts)
-		case TypeDS:
-			keyTag := binary.BigEndian.Uint16(data[current:])
-			algo := data[current+2]
-			digestType := data[current+3]
-			digest := data[current+4 : current+int(rdlength)]
-			rdata = DS{keyTag, algo, digestType, digest}
-		case TypeRRSIG:
-			typeCovered, _, _ := readType(data, current)
-			algo := data[current+2]
-			labels := data[current+3]
-			originalTtl := binary.BigEndian.Uint32(data[current+4:])
-			signatureExpiration := time.Unix(int64(binary.BigEndian.Uint32(data[current+8:])), 0).UTC()
-			signatureInception := time.Unix(int64(binary.BigEndian.Uint32(data[current+12:])), 0).UTC()
-			keyTag := binary.BigEndian.Uint16(data[current+16:])
-			decoded, next, err := decodeName(data, current+18)
-			if err != nil {
-				return nil, 0, err
-			}
-			signerName := decoded.String()
-			signature := data[next : current+int(rdlength)]
-			const LAYOUT = "20060102150405"
-			rdata = RRSIG{typeCovered.String(), algo, labels, originalTtl,
-				signatureExpiration.Format(LAYOUT), signatureInception.Format(LAYOUT),
-				keyTag, signerName, base64.StdEncoding.EncodeToString(signature)}
-		case TypeNSEC:
-			decoded, next, err := decodeName(data, current)
-			if err != nil {
-				return nil, 0, err
-			}
-			nextDomainName := decoded.String()
-			windowBlock := data[next]
-			bitmapLen := int(data[next+1])
-			bitmap := data[next+2 : next+2+bitmapLen]
-			var typeTexts []string
-			var types []int
-			for _, v := range typeOf {
-				types = append(types, int(v))
-			}
-			sort.Ints(types)
-			if windowBlock == 0 {
-				for _, v := range types {
-					if v/8 < bitmapLen && bitmap[v/8]>>(7-v%8)&1 == 1 {
-						typeTexts = append(typeTexts, typeTextOf[rrType(uint16(v))])
-					}
+		val = decoded.String()
+		rdata = Name(val)
+	case TypeMX:
+		preference := binary.BigEndian.Uint16(data[current:])
+		exchange, _, err := decodeName(data, current+2)
+		if err != nil {
+			return nil, 0, err
+		}
+		rdata = MX{preference, exchange.String()}
+	case TypeSOA:
+		mname, next, err := decodeName(data, current)
+		if err != nil {
+			return nil, 0, err
+		}
+		rname, next, err := decodeName(data, next)
+		if err != nil {
+			return nil, 0, err
+		}
+		serial := binary.BigEndian.Uint32(data[next:])
+		refresh := binary.BigEndian.Uint32(data[next+4:])
+		retry := binary.BigEndian.Uint32(data[next+8:])
+		expire := binary.BigEndian.Uint32(data[next+12:])
+		minimum := binary.BigEndian.Uint32(data[next+16:])
+		rdata = SOA{mname.String(), rname.String(), serial, refresh, retry, expire, minimum}
+	case TypeTXT:
+		texts := decodeTexts(data, current, current+int(rdlength))
+		for i, v := range texts {
+			texts[i] = fmt.Sprintf("%q", v)
+		}
+		rdata = newTxt(texts)
+	case TypeOPT:
+		rdata = RDataStr("")
+	case TypeDS:
+		keyTag := binary.BigEndian.Uint16(data[current:])
+		algo := data[current+2]
+		digestType := data[current+3]
+		digest := data[current+4 : current+int(rdlength)]
+		rdata = DS{keyTag, algo, digestType, digest}
+	case TypeRRSIG:
+		typeCovered, _, _ := readType(data, current)
+		algo := data[current+2]
+		labels := data[current+3]
+		originalTtl := binary.BigEndian.Uint32(data[current+4:])
+		signatureExpiration := time.Unix(int64(binary.BigEndian.Uint32(data[current+8:])), 0).UTC()
+		signatureInception := time.Unix(int64(binary.BigEndian.Uint32(data[current+12:])), 0).UTC()
+		keyTag := binary.BigEndian.Uint16(data[current+16:])
+		decoded, next, err := decodeName(data, current+18)
+		if err != nil {
+			return nil, 0, err
+		}
+		signerName := decoded.String()
+		signature := data[next : current+int(rdlength)]
+		const LAYOUT = "20060102150405"
+		rdata = RRSIG{typeCovered.String(), algo, labels, originalTtl,
+			signatureExpiration.Format(LAYOUT), signatureInception.Format(LAYOUT),
+			keyTag, signerName, base64.StdEncoding.EncodeToString(signature)}
+	case TypeNSEC:
+		decoded, next, err := decodeName(data, current)
+		if err != nil {
+			return nil, 0, err
+		}
+		nextDomainName := decoded.String()
+		windowBlock := data[next]
+		bitmapLen := int(data[next+1])
+		bitmap := data[next+2 : next+2+bitmapLen]
+		var typeTexts []string
+		var types []int
+		for _, v := range typeOf {
+			types = append(types, int(v))
+		}
+		sort.Ints(types)
+		if windowBlock == 0 {
+			for _, v := range types {
+				if v/8 < bitmapLen && bitmap[v/8]>>(7-v%8)&1 == 1 {
+					typeTexts = append(typeTexts, typeTextOf[rrType(uint16(v))])
 				}
 			}
-			rdata = NSEC{nextDomainName, strings.Join(typeTexts, " ")}
-		case TypeDNSKEY:
-			flags := binary.BigEndian.Uint16(data[current:])
-			proto := data[current+2]
-			if proto != 3 {
-				return nil, 0, fmt.Errorf("DNSKEY proto: %v", proto)
-			}
-			algo := data[current+3]
-			key := data[current+4 : current+int(rdlength)]
-			rdata = DNSKEY{flags, proto, algo, base64.StdEncoding.EncodeToString(key)}
-		default:
-			rdata = RDataStr(fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength))
 		}
-		current += int(rdlength)
-
-		return &ResourceRecord{
-			name,
-			type_,
-			class,
-			ttl,
-			rdata,
-		}, current, nil
-	} else { // OPT
-		fields, _, err := readFields(data, current+1, readType, readClass, readTtl, readRdlength)
-		if err != nil {
-			return nil, 0, err
+		rdata = NSEC{nextDomainName, strings.Join(typeTexts, " ")}
+	case TypeDNSKEY:
+		flags := binary.BigEndian.Uint16(data[current:])
+		proto := data[current+2]
+		if proto != 3 {
+			return nil, 0, fmt.Errorf("DNSKEY proto: %v", proto)
 		}
-		type_ := fields[0].(rrType)
-		class := fields[1].(class)
-		ttl := fields[2].(TTL)
-
-		return &ResourceRecord{
-			Name(""),
-			type_,
-			class,
-			ttl,
-			RDataStr(""),
-		}, current + OPT_RESOURCE_RECORD_HEADER_SIZE, nil
+		algo := data[current+3]
+		key := data[current+4 : current+int(rdlength)]
+		rdata = DNSKEY{flags, proto, algo, base64.StdEncoding.EncodeToString(key)}
+	default:
+		rdata = RDataStr(fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength))
 	}
+	current += int(rdlength)
+
+	return &ResourceRecord{
+		name,
+		type_,
+		class,
+		ttl,
+		rdata,
+	}, current, nil
 }
 
 func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
