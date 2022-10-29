@@ -2,10 +2,10 @@ package dns
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"net/netip"
 	"sort"
 	"strings"
@@ -785,8 +785,13 @@ func MakeReqMsg(n string, t string, rd bool, edns bool) ([]byte, error) {
 		arbytes = append(arbytes, opt.bytes()...)
 	}
 
+	rnd := make([]byte, 2)
+	_, err = rand.Read(rnd)
+	if err != nil {
+		return nil, err
+	}
 	header := &Header{
-		ID:      uint16(rand.Intn(0x10000)),
+		ID:      binary.BigEndian.Uint16(rnd),
 		Fields:  headerFields,
 		QDCount: 1,
 		ARCount: arcount,

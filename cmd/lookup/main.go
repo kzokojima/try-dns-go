@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"math/rand"
 	"net/netip"
 	"os"
 	"strings"
@@ -203,8 +202,6 @@ func die(err error) {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
 	opts, err := getOpts(os.Args[1:])
 	if err != nil {
 		die(err)
