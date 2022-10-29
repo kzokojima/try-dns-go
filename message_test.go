@@ -49,8 +49,8 @@ func TestResponseBytes(t *testing.T) {
 			{Name("example.com."), TypeNS, ClassIN, 3600, NS("ns2.example.com.")},
 		}
 		additionals := []ResourceRecord{
-			{Name("mx1.example.com."), TypeA, ClassIN, 600, netip.MustParseAddr("192.0.2.3")},
-			{Name("mx2.example.com."), TypeA, ClassIN, 600, netip.MustParseAddr("192.0.2.4")},
+			{Name("mx1.example.com."), TypeA, ClassIN, 600, A(netip.MustParseAddr("192.0.2.3"))},
+			{Name("mx2.example.com."), TypeA, ClassIN, 600, A(netip.MustParseAddr("192.0.2.4"))},
 			{Name("mx1.example.com."), TypeAAAA, ClassIN, 600, AAAA(netip.MustParseAddr("2001:db8::3"))},
 			{Name("mx2.example.com."), TypeAAAA, ClassIN, 600, AAAA(netip.MustParseAddr("2001:db8::4"))},
 		}
@@ -69,8 +69,8 @@ func TestResponseBytes(t *testing.T) {
 	{
 		answers := []ResourceRecord{
 			{Name("www.example.com."), TypeCNAME, ClassIN, 3600, CNAME("example.com.")},
-			{Name("example.com."), TypeA, ClassIN, 600, netip.MustParseAddr("192.0.2.1")},
-			{Name("example.com."), TypeA, ClassIN, 600, netip.MustParseAddr("192.0.2.2")},
+			{Name("example.com."), TypeA, ClassIN, 600, A(netip.MustParseAddr("192.0.2.1"))},
+			{Name("example.com."), TypeA, ClassIN, 600, A(netip.MustParseAddr("192.0.2.2"))},
 		}
 		authorities := []ResourceRecord{
 			{Name("example.com."), TypeNS, ClassIN, 3600, NS("ns1.example.com.")},

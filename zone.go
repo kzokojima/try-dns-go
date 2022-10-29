@@ -73,7 +73,7 @@ func ReadZonefile(path string) (*Zone, error) {
 			}
 
 			var (
-				type_ rrType
+				type_ Type
 				rdata RData
 			)
 
@@ -86,7 +86,7 @@ func ReadZonefile(path string) (*Zone, error) {
 					return nil, fmt.Errorf("invalid IPv4 addr")
 				}
 				type_ = TypeA
-				rdata = addr
+				rdata = A(addr)
 			} else if fields[0] == "MX" && len(fields) == 3 {
 				preference, err := strconv.Atoi(fields[1])
 				if err != nil {

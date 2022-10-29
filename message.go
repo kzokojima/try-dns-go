@@ -140,6 +140,10 @@ const (
 
 type Name string
 
+func (n Name) MarshalBinary(msg []byte) (data []byte, err error) {
+	return encodeName(string(n), msg)
+}
+
 func (n Name) String() string {
 	return string(n)
 }
@@ -265,39 +269,8 @@ func decodeTexts(data []byte, current int, end int) []string {
 
 type Question struct {
 	Name  Name
-	Type  rrType
+	Type  Type
 	Class class
-}
-
-var typeOf = map[string]rrType{
-	"A":      1,
-	"NS":     2,
-	"CNAME":  5,
-	"SOA":    6,
-	"PTR":    12,
-	"MX":     15,
-	"TXT":    16,
-	"AAAA":   28,
-	"OPT":    41,
-	"DS":     43,
-	"RRSIG":  46,
-	"NSEC":   47,
-	"DNSKEY": 48,
-}
-var typeTextOf = map[rrType]string{
-	1:  "A",
-	2:  "NS",
-	5:  "CNAME",
-	6:  "SOA",
-	12: "PTR",
-	15: "MX",
-	16: "TXT",
-	28: "AAAA",
-	41: "OPT",
-	43: "DS",
-	46: "RRSIG",
-	47: "NSEC",
-	48: "DNSKEY",
 }
 
 var classOf = map[string]class{
@@ -330,32 +303,9 @@ func readFields(data []byte, current int, readers ...reader) ([]field, int, erro
 	return fields, current, nil
 }
 
-type rrType uint16
-type Type = rrType
-
-const (
-	TypeA      rrType = 1
-	TypeNS     rrType = 2
-	TypeCNAME  rrType = 5
-	TypeSOA    rrType = 6
-	TypePTR    rrType = 12
-	TypeMX     rrType = 15
-	TypeTXT    rrType = 16
-	TypeAAAA   rrType = 28
-	TypeOPT    rrType = 41
-	TypeDS     rrType = 43
-	TypeRRSIG  rrType = 46
-	TypeNSEC   rrType = 47
-	TypeDNSKEY rrType = 48
-)
-
-func (t rrType) String() string {
-	return typeTextOf[t]
-}
-
 func readType(data []byte, current int) (field, int, error) {
-	type_ := rrType(binary.BigEndian.Uint16(data[current:]))
-	if _, ok := typeTextOf[type_]; ok {
+	type_ := Type(binary.BigEndian.Uint16(data[current:]))
+	if _, ok := typeTexts[type_]; ok {
 		return type_, current + 2, nil
 	}
 	return type_, 0, fmt.Errorf("invalid type: %v", uint16(type_))
@@ -418,10 +368,16 @@ func (q Question) String() string {
 }
 
 type RData interface {
+	MarshalBinary(msg []byte) (data []byte, err error)
 	String() string
 }
 
 type RDataStr string
+
+func (s RDataStr) MarshalBinary(msg []byte) (data []byte, err error) {
+	// TODO
+	return
+}
 
 func (s RDataStr) String() string {
 	return string(s)
@@ -429,7 +385,7 @@ func (s RDataStr) String() string {
 
 type ResourceRecord struct {
 	Name  Name
-	Type  rrType
+	Type  Type
 	Class class
 	TTL   TTL
 	RData RData
@@ -443,7 +399,7 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		return nil, 0, fmt.Errorf("%v, fields: %v", err, fields)
 	}
 	name := fields[0].(Name)
-	type_ := fields[1].(rrType)
+	type_ := fields[1].(Type)
 	class := fields[2].(class)
 	ttl := fields[3].(TTL)
 	rdlength := fields[4].(rdlength)
@@ -453,7 +409,7 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 	switch type_ {
 	case TypeA:
 		ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
-		rdata = ip
+		rdata = A(ip)
 	case TypeAAAA:
 		ip, _ := netip.AddrFromSlice(data[current : current+int(rdlength)])
 		rdata = AAAA(ip)
@@ -527,20 +483,20 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		windowBlock := data[next]
 		bitmapLen := int(data[next+1])
 		bitmap := data[next+2 : next+2+bitmapLen]
-		var typeTexts []string
+		var texts []string
 		var types []int
-		for _, v := range typeOf {
+		for v := range typeTexts {
 			types = append(types, int(v))
 		}
 		sort.Ints(types)
 		if windowBlock == 0 {
 			for _, v := range types {
 				if v/8 < bitmapLen && bitmap[v/8]>>(7-v%8)&1 == 1 {
-					typeTexts = append(typeTexts, typeTextOf[rrType(uint16(v))])
+					texts = append(texts, typeTexts[Type(uint16(v))])
 				}
 			}
 		}
-		rdata = NSEC{nextDomainName, strings.Join(typeTexts, " ")}
+		rdata = NSEC{nextDomainName, strings.Join(texts, " ")}
 	case TypeDNSKEY:
 		flags := binary.BigEndian.Uint16(data[current:])
 		proto := data[current+2]
@@ -576,53 +532,13 @@ func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
 	binary.BigEndian.PutUint16(bytes[l+2:], uint16(rr.Class))
 	binary.BigEndian.PutUint32(bytes[l+4:], uint32(rr.TTL))
 	switch rr.Type {
-	case TypeA:
-		addr, err := netip.ParseAddr(rr.RData.String())
+	case TypeA, TypeNS, TypeCNAME, TypeMX, TypeTXT, TypeAAAA:
+		data, err := rr.RData.MarshalBinary(msg)
 		if err != nil {
 			return nil, err
 		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(4))
-		bytes = append(bytes, addr.AsSlice()...)
-	case TypeNS:
-		ns := rr.RData.(NS)
-		name, err := encodeName(ns.String(), msg)
-		if err != nil {
-			return nil, err
-		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(uint16(len(name))))
-		bytes = append(bytes, name...)
-	case TypeCNAME:
-		cname := rr.RData.(CNAME)
-		name, err := encodeName(cname.String(), msg)
-		if err != nil {
-			return nil, err
-		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(uint16(len(name))))
-		bytes = append(bytes, name...)
-	case TypeMX:
-		mx := rr.RData.(MX)
-		name, err := encodeName(mx.Exchange, msg)
-		if err != nil {
-			return nil, err
-		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(2+uint16(len(name))))
-		bytes = append(bytes, byte(0), byte(0))
-		binary.BigEndian.PutUint16(bytes[l+10:], uint16(mx.Preference))
-		bytes = append(bytes, name...)
-	case TypeTXT:
-		txt, err := rr.RData.(TXT).encode()
-		if err != nil {
-			return nil, err
-		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(txt)))
-		bytes = append(bytes, txt...)
-	case TypeAAAA:
-		aaaa, err := rr.RData.(AAAA).encode()
-		if err != nil {
-			return nil, err
-		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(aaaa)))
-		bytes = append(bytes, aaaa...)
+		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(data)))
+		bytes = append(bytes, data...)
 	case TypeOPT:
 		return []byte{}, nil
 	default:
@@ -765,7 +681,11 @@ type Request struct {
 }
 
 func MakeReqMsg(n string, t string, rd bool, edns bool) ([]byte, error) {
-	question := Question{Name(n), typeOf[t], classOf["IN"]}
+	typeText, err := typeFromString(t)
+	if err != nil {
+		return nil, err
+	}
+	question := Question{Name(n), typeText, classOf["IN"]}
 	questionBytes, err := question.Bytes()
 	if err != nil {
 		return nil, err
@@ -852,125 +772,10 @@ func parseMessage(msg []byte) (*message, error) {
 
 	return &message{
 		*header,
-		Question{fields[0].(Name), fields[1].(rrType), fields[2].(class)},
+		Question{fields[0].(Name), fields[1].(Type), fields[2].(class)},
 		records[:header.ANCount],
 		records[header.ANCount : header.ANCount+header.NSCount],
 		records[header.ANCount+header.NSCount : header.ANCount+header.NSCount+header.ARCount],
 		current,
 	}, nil
-}
-
-type A = netip.Addr
-
-type NS = Name
-
-type CNAME = Name
-
-type SOA struct {
-	mname   string
-	rname   string
-	serial  uint32
-	refresh uint32
-	retry   uint32
-	expire  uint32
-	minimum uint32
-}
-
-func (soa SOA) String() string {
-	return fmt.Sprintf("%v %v %v %v %v %v %v", soa.mname, soa.rname, soa.serial, soa.refresh, soa.retry, soa.expire, soa.minimum)
-}
-
-type MX struct {
-	Preference uint16
-	Exchange   string
-}
-
-func (mx MX) String() string {
-	return fmt.Sprint(mx.Preference, " ", mx.Exchange)
-}
-
-type TXT string
-
-func newTxt(fields []string) TXT {
-	return TXT(strings.Join(fields, "\x00"))
-}
-
-func (txt TXT) encode() ([]byte, error) {
-	return encodeTexts(strings.Split(string(txt), "\x00"))
-}
-
-func (txt TXT) String() string {
-	return strings.ReplaceAll(string(txt), "\x00", " ")
-}
-
-type AAAA netip.Addr
-
-func newAAAA(fields []string) (*AAAA, error) {
-	addr, err := netip.ParseAddr(fields[0])
-	if err != nil {
-		return nil, err
-	}
-	if !addr.Is6() {
-		return nil, fmt.Errorf("invalid IPv4 addr")
-	}
-	aaaa := AAAA(addr)
-	return &aaaa, nil
-}
-
-func (aaaa AAAA) encode() ([]byte, error) {
-	return netip.Addr(aaaa).AsSlice(), nil
-}
-
-func (aaaa AAAA) String() string {
-	return netip.Addr(aaaa).String()
-}
-
-type DS struct {
-	keyTag     uint16
-	algo       byte
-	digestType byte
-	digest     []byte
-}
-
-func (ds DS) String() string {
-	return fmt.Sprintf("%v %v %v %X", ds.keyTag, ds.algo, ds.digestType, ds.digest)
-}
-
-type RRSIG struct {
-	typeCovered         string
-	algo                byte
-	labels              byte
-	originalTtl         uint32
-	signatureExpiration string
-	signatureInception  string
-	keyTag              uint16
-	signerName          string
-	signature           string
-}
-
-func (rrsig RRSIG) String() string {
-	return fmt.Sprintf("%v %v %v %v %v %v %v %v %v",
-		rrsig.typeCovered, rrsig.algo, rrsig.labels, rrsig.originalTtl,
-		rrsig.signatureExpiration, rrsig.signatureInception,
-		rrsig.keyTag, rrsig.signerName, rrsig.signature)
-}
-
-type NSEC struct {
-	nextDomainName string
-	typeTexts      string
-}
-
-func (nsec NSEC) String() string {
-	return fmt.Sprintf("%v %v", nsec.nextDomainName, nsec.typeTexts)
-}
-
-type DNSKEY struct {
-	flags uint16
-	proto byte
-	algo  byte
-	key   string
-}
-
-func (dnskey DNSKEY) String() string {
-	return fmt.Sprintf("%v %v %v %v", dnskey.flags, dnskey.proto, dnskey.algo, dnskey.key)
 }
