@@ -153,11 +153,7 @@ func recursiveResolve(name string, type_ string, client *dns.Client) ([]dns.Reso
 
 	for {
 		log.Printf("[debug] recursiveResolve: nameServer: @%v %v %v", nameServer, name, type_)
-		resMsg, err := client.Do("udp", nameServer+":53", name, type_, false, false)
-		if err != nil {
-			return nil, err
-		}
-		res, err := dns.ParseResMsg(resMsg)
+		res, err := client.Do("udp", nameServer+":53", name, type_, false, false)
 		if err != nil {
 			return nil, err
 		}

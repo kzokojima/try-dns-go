@@ -663,6 +663,7 @@ type Response struct {
 	AdditionalResourceRecords []ResourceRecord
 	MsgSize                   int
 	QueryTime                 time.Duration
+	RawMsg                    []byte
 }
 
 func MakeResponse(reqHeader Header, question Question,
@@ -685,6 +686,7 @@ func MakeResponse(reqHeader Header, question Question,
 		additionals,
 		0,
 		0,
+		nil,
 	}
 	return &res, nil
 }
@@ -703,6 +705,7 @@ func ParseResMsg(data []byte) (*Response, error) {
 		msg.AdditionalResourceRecords,
 		msg.Size,
 		0,
+		data,
 	}, nil
 }
 

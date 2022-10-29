@@ -227,24 +227,16 @@ func main() {
 		network = "tcp"
 	}
 	client := dns.Client{}
-	time_sent := time.Now()
-	resMsg, err := client.Do(network, opts.server+":"+opts.port, opts.name, opts.type_, opts.rec, true)
+	res, err := client.Do(network, opts.server+":"+opts.port, opts.name, opts.type_, opts.rec, true)
 	if err != nil {
+		if res != nil {
+			printBytes(res.RawMsg)
+		}
 		die(err)
 	}
 	if opts.raw {
-		os.Stdout.Write(resMsg)
+		os.Stdout.Write(res.RawMsg)
 	} else {
-		query_time := time.Since(time_sent)
-		if opts.tcp {
-			resMsg = resMsg[2:]
-		}
-		res, err := dns.ParseResMsg(resMsg)
-		if err != nil {
-			printBytes(resMsg)
-			die(err)
-		}
-		res.QueryTime = query_time
 		print(res, opts)
 	}
 }

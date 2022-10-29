@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"time"
 )
 
 type Client struct {
@@ -11,7 +12,7 @@ type Client struct {
 	count int
 }
 
-func (c *Client) Do(network string, address string, name string, type_ string, rec bool, edns bool) ([]byte, error) {
+func (c *Client) Do(network string, address string, name string, type_ string, rec bool, edns bool) (*Response, error) {
 	c.count++
 	if 1 <= c.Limit && c.Limit < c.count {
 		return nil, fmt.Errorf("exceed count")
@@ -25,6 +26,7 @@ func (c *Client) Do(network string, address string, name string, type_ string, r
 		binary.BigEndian.PutUint16(reqMsg, uint16(len(reqMsg)-2))
 	}
 
+	timeSent := time.Now()
 	conn, err := net.Dial(network, address)
 	if err != nil {
 		return nil, err
@@ -38,6 +40,16 @@ func (c *Client) Do(network string, address string, name string, type_ string, r
 	if err != nil {
 		return nil, err
 	}
-
-	return buf[:len], nil
+	queryTime := time.Since(timeSent)
+	offset := 0
+	if network == "tcp" {
+		offset = 2
+	}
+	res, err := ParseResMsg(buf[offset:len])
+	if err != nil {
+		res = &Response{RawMsg: buf[offset:len]}
+		return res, err
+	}
+	res.QueryTime = queryTime
+	return res, nil
 }
