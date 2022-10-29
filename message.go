@@ -21,10 +21,10 @@ type Header struct {
 	ARCount uint16
 }
 
-const HEADER_SIZE = 12
+const headerSize = 12
 
 func parseHeader(data []byte) (*Header, error) {
-	if len(data) < HEADER_SIZE {
+	if len(data) < headerSize {
 		return nil, fmt.Errorf("header length")
 	}
 	return &Header{
@@ -81,7 +81,7 @@ func (h *Header) resourceRecordCount() int {
 }
 
 func (h *Header) Bytes() []byte {
-	bytes := make([]byte, HEADER_SIZE)
+	bytes := make([]byte, headerSize)
 	binary.BigEndian.PutUint16(bytes[:], h.ID)
 	binary.BigEndian.PutUint16(bytes[2:], h.Fields)
 	binary.BigEndian.PutUint16(bytes[4:], h.QDCount)
@@ -134,8 +134,8 @@ func (h Header) String() string {
 }
 
 const (
-	LABEL_LEN_MAX       = 63
-	DOMAIN_NAME_LEN_MAX = 253
+	labelLenMax      = 63
+	domainNameLenMax = 253
 )
 
 type Name string
@@ -150,7 +150,7 @@ func encodeName(name string, msg []byte) ([]byte, error) {
 	}
 
 	name = strings.TrimRight(name, ".")
-	if DOMAIN_NAME_LEN_MAX < len(name) {
+	if domainNameLenMax < len(name) {
 		return nil, fmt.Errorf("%s length", name)
 	}
 
@@ -199,7 +199,7 @@ func encodeName(name string, msg []byte) ([]byte, error) {
 	labels := strings.Split(name, ".")
 	for _, label := range labels {
 		len := len(label)
-		if LABEL_LEN_MAX < len {
+		if labelLenMax < len {
 			return nil, fmt.Errorf("%s length", label)
 		}
 		buf.WriteByte(byte(len))
@@ -643,10 +643,8 @@ type optResourceRecord struct {
 	rdlen uint16
 }
 
-const OPT_RESOURCE_RECORD_HEADER_SIZE = 11
-
 func (opt *optResourceRecord) bytes() []byte {
-	bytes := make([]byte, OPT_RESOURCE_RECORD_HEADER_SIZE)
+	bytes := make([]byte, 11)
 	bytes[0] = opt.name
 	binary.BigEndian.PutUint16(bytes[1:], opt.type_)
 	binary.BigEndian.PutUint16(bytes[3:], opt.class)
@@ -757,7 +755,7 @@ func MakeErrResMsg(request *Request) []byte {
 	return res
 }
 
-const UDP_SIZE = 1500
+const udpSize = 1500
 
 type Request struct {
 	Header                    Header
@@ -780,7 +778,7 @@ func MakeReqMsg(n string, t string, rd bool, edns bool) ([]byte, error) {
 		arcount = 1
 		opt := optResourceRecord{
 			type_: 41,
-			class: UDP_SIZE, // UDP payload size
+			class: udpSize, // UDP payload size
 		}
 		arbytes = append(arbytes, opt.bytes()...)
 	}
@@ -836,7 +834,7 @@ func parseMessage(msg []byte) (*message, error) {
 	}
 
 	// Question section
-	fields, current, err := readFields(msg, HEADER_SIZE, decodeName, readType, readClass)
+	fields, current, err := readFields(msg, headerSize, decodeName, readType, readClass)
 	if err != nil {
 		return nil, err
 	}

@@ -35,7 +35,7 @@ func (c *Client) Do(network string, address string, name string, type_ string, r
 	if err != nil {
 		return nil, err
 	}
-	var buf [UDP_SIZE]byte
+	var buf [udpSize]byte
 	len, err := conn.Read(buf[:])
 	if err != nil {
 		return nil, err
