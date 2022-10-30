@@ -149,7 +149,7 @@ func (n Name) String() string {
 }
 
 func encodeName(name string, msg []byte) ([]byte, error) {
-	if name == "." {
+	if name == "" || name == "." {
 		return []byte{0}, nil
 	}
 
@@ -531,42 +531,24 @@ func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
 	binary.BigEndian.PutUint16(bytes[l:], uint16(rr.Type))
 	binary.BigEndian.PutUint16(bytes[l+2:], uint16(rr.Class))
 	binary.BigEndian.PutUint32(bytes[l+4:], uint32(rr.TTL))
+	var rdata []byte
 	switch rr.Type {
 	case TypeA, TypeNS, TypeCNAME, TypeMX, TypeTXT, TypeAAAA:
-		data, err := rr.RData.MarshalBinary(msg)
+		rdata, err = rr.RData.MarshalBinary(msg)
 		if err != nil {
 			return nil, err
 		}
-		binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(data)))
-		bytes = append(bytes, data...)
 	case TypeOPT:
-		return []byte{}, nil
 	default:
 		return nil, fmt.Errorf("type: %v", rr.Type)
 	}
+	binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(rdata)))
+	bytes = append(bytes, rdata...)
 	return bytes, nil
 }
 
 func (rr ResourceRecord) String() string {
 	return fmt.Sprintf("%v %v %v %v %v", rr.Name, rr.TTL, rr.Class, rr.Type, rr.RData.String())
-}
-
-type optResourceRecord struct {
-	name  byte
-	type_ uint16
-	class uint16
-	ttl   uint32
-	rdlen uint16
-}
-
-func (opt *optResourceRecord) bytes() []byte {
-	bytes := make([]byte, 11)
-	bytes[0] = opt.name
-	binary.BigEndian.PutUint16(bytes[1:], opt.type_)
-	binary.BigEndian.PutUint16(bytes[3:], opt.class)
-	binary.BigEndian.PutUint32(bytes[5:], opt.ttl)
-	binary.BigEndian.PutUint16(bytes[9:], opt.rdlen)
-	return bytes
 }
 
 type Response struct {
@@ -692,15 +674,19 @@ func MakeReqMsg(n string, t string, rd bool, edns bool) ([]byte, error) {
 	}
 	headerFields := map[bool]uint16{false: 0, true: 1 << 8}[rd]
 
-	arcount := uint16(0)
-	arbytes := []byte{}
+	var arcount uint16
+	var arbytes []byte
 	if edns {
 		arcount = 1
-		opt := optResourceRecord{
-			type_: 41,
-			class: udpSize, // UDP payload size
+		opt := ResourceRecord{
+			Type:  TypeOPT,
+			Class: udpSize, // UDP payload size
 		}
-		arbytes = append(arbytes, opt.bytes()...)
+		bytes, err := opt.Bytes(nil)
+		if err != nil {
+			return nil, err
+		}
+		arbytes = append(arbytes, bytes...)
 	}
 
 	rnd := make([]byte, 2)
