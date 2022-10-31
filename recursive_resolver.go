@@ -28,14 +28,14 @@ func LoadRootZone(path string) error {
 }
 
 func RecursiveResolve(name string, type_ string, client *Client) ([]ResourceRecord, error) {
-	log.Printf("[debug] recursiveResolve: %v %v", name, type_)
+	log.Printf("[debug] RecursiveResolve: %v %v", name, type_)
 	nameServer := rootServer
 	if client == nil {
 		client = &Client{Limit: 20}
 	}
 
 	for {
-		log.Printf("[debug] recursiveResolve: nameServer: @%v %v %v", nameServer, name, type_)
+		log.Printf("[debug] RecursiveResolve: nameServer: @%v %v %v", nameServer, name, type_)
 		res, err := client.Do("udp", nameServer+":53", name, type_, false, false)
 		if err != nil {
 			return nil, err
@@ -56,7 +56,7 @@ func RecursiveResolve(name string, type_ string, client *Client) ([]ResourceReco
 		}
 		if len(res.AuthorityResourceRecords) != 0 {
 			nsname := res.AuthorityResourceRecords[0].RData.String()
-			log.Printf("[debug] recursiveResolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
+			log.Printf("[debug] RecursiveResolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
 			if len(res.AdditionalResourceRecords) != 0 {
 				var found *ResourceRecord
 				for _, adrr := range res.AdditionalResourceRecords {
@@ -66,7 +66,7 @@ func RecursiveResolve(name string, type_ string, client *Client) ([]ResourceReco
 					}
 				}
 				if found != nil {
-					log.Printf("[debug] recursiveResolve: found: %v", found)
+					log.Printf("[debug] RecursiveResolve: found: %v", found)
 					nameServer = found.RData.String()
 					continue
 				}
