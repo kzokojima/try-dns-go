@@ -1,11 +1,9 @@
-package main
+package dns
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestRecursiveResolve(t *testing.T) {
-	rrs, err := recursiveResolve("one.one.one.one.", "A", nil)
+	rrs, err := RecursiveResolve("one.one.one.one.", "A", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

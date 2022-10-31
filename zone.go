@@ -111,7 +111,7 @@ func ReadZonefile(path string) (*Zone, error) {
 					name = fields[1] + "." + zone.Origin
 				}
 				type_ = TypeNS
-				rdata = NS(name)
+				rdata = NS(strings.ToLower(name))
 			} else if fields[0] == "CNAME" && len(fields) == 2 {
 				name := fields[1]
 				if name == "@" {
@@ -136,7 +136,7 @@ func ReadZonefile(path string) (*Zone, error) {
 			}
 
 			zone.Records = append(zone.Records, ResourceRecord{
-				Name(name),
+				Name(strings.ToLower(name)),
 				type_,
 				class,
 				TTL(ttl),

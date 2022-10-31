@@ -31,7 +31,7 @@ $ bin/lookup -x 2606:4700:4700::1111
 
 ```
 # start server
-$ bin/serv 0.0.0.0:8053 testdata/zones/example.com.zone &
+$ bin/serv -address=0.0.0.0:8053 -mode=authoritative -zone=testdata/zones/example.com.zone &
 
 # lookup
 $ dig @127.0.0.1 -p 8053 example.com
@@ -44,7 +44,7 @@ $ pkill -f 0.0.0.0:8053
 
 ```
 # start server
-$ bin/serv 0.0.0.0:8053 &
+$ bin/serv -address=0.0.0.0:8053 -zone=named.root &
 
 # lookup
 $ dig @127.0.0.1 -p 8053 example.com

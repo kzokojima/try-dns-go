@@ -65,7 +65,7 @@ test_lookup() {
 test_authoritative_server() {
     local CMD="dig @127.0.0.1 -p ${DNS_PORT}"
 
-    bin/serv 0.0.0.0:${DNS_PORT} testdata/zones/example.com.zone 2> /dev/null &
+    bin/serv -address=0.0.0.0:${DNS_PORT} -mode=authoritative -zone=testdata/zones/example.com.zone 2> /dev/null &
 
     # TODO: for each in test/*.sh ; do
     for each in test/*example.com*.sh ; do
@@ -84,7 +84,7 @@ test_authoritative_server() {
 test_recursive_resolver() {
     local CMD="dig @127.0.0.1 -p ${DNS_PORT}"
 
-    bin/serv 0.0.0.0:${DNS_PORT} 2> /dev/null &
+    bin/serv -address=0.0.0.0:${DNS_PORT} -zone=named.root 2> /dev/null &
 
     for each in test/recursive_resolver/*.sh ; do
         if source $each; then
