@@ -3,6 +3,7 @@ package dns
 import "testing"
 
 func TestRecursiveResolve(t *testing.T) {
+	rootServer = "198.41.0.4"
 	rrs, err := RecursiveResolve("one.one.one.one.", "A", nil)
 	if err != nil {
 		t.Fatal(err)

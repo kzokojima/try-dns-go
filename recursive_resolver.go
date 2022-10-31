@@ -9,8 +9,7 @@ var RootServerNSRRs []ResourceRecord
 
 var RootServers []ResourceRecord
 
-// a.root-servers.net
-var rootServer = "198.41.0.4"
+var rootServer string
 
 func LoadRootZone(path string) error {
 	zone, err := ReadZonefile(path)
@@ -21,6 +20,9 @@ func LoadRootZone(path string) error {
 		if rr.Type == TypeNS {
 			RootServerNSRRs = append(RootServerNSRRs, rr)
 		} else {
+			if rootServer == "" && rr.Type == TypeA {
+				rootServer = rr.RData.String()
+			}
 			RootServers = append(RootServers, rr)
 		}
 	}
