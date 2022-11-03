@@ -12,12 +12,12 @@ type Client struct {
 	count int
 }
 
-func (c *Client) Do(network string, address string, name string, type_ string, rec bool, edns bool) (*Response, error) {
+func (c *Client) Do(network string, address string, question Question, rec bool, edns bool) (*Response, error) {
 	c.count++
 	if 1 <= c.Limit && c.Limit < c.count {
 		return nil, fmt.Errorf("exceed count")
 	}
-	reqMsg, err := MakeReqMsg(name, type_, rec, edns)
+	reqMsg, err := MakeReqMsg(question, rec, edns)
 	if err != nil {
 		return nil, err
 	}

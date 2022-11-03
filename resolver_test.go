@@ -2,9 +2,9 @@ package dns
 
 import "testing"
 
-func TestRecursiveResolve(t *testing.T) {
+func TestResolve(t *testing.T) {
 	rootServer = "198.41.0.4"
-	rrs, err := RecursiveResolve("one.one.one.one.", "A", nil)
+	rrs, err := Resolve(Question{Name("one.one.one.one."), TypeA, ClassIN}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

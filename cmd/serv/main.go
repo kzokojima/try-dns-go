@@ -96,7 +96,9 @@ func authoritativeServer(req dns.Request) ([]byte, error) {
 	return bytes, nil
 }
 
-func recursiveResolver(req dns.Request) ([]byte, error) {
+var cache = dns.NewCache()
+
+func resolver(req dns.Request) ([]byte, error) {
 	if req.Question.Name == "." && req.Question.Type == dns.TypeNS {
 		// root
 		answers := dns.RootServerNSRRs
@@ -112,7 +114,7 @@ func recursiveResolver(req dns.Request) ([]byte, error) {
 		return bytes, nil
 	}
 
-	rrs, err := dns.RecursiveResolve(req.Question.Name.String(), req.Question.Type.String(), nil)
+	rrs, err := dns.Resolve(req.Question, nil, cache)
 	if err != nil {
 		return nil, fmt.Errorf("ERR1")
 	}
@@ -172,7 +174,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fn := recursiveResolver
+	fn := resolver
 	if mode == "authoritative" {
 		loadZonefiles(zone)
 		fn = authoritativeServer

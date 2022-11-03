@@ -224,7 +224,11 @@ func main() {
 		network = "tcp"
 	}
 	client := dns.Client{}
-	res, err := client.Do(network, opts.server+":"+opts.port, opts.name, opts.type_, opts.rec, true)
+	question, err := dns.NewQuestionFromString(opts.name, opts.type_, "IN")
+	if err != nil {
+		die(err)
+	}
+	res, err := client.Do(network, opts.server+":"+opts.port, question, opts.rec, true)
 	if err != nil {
 		if res != nil {
 			printBytes(res.RawMsg)

@@ -273,6 +273,32 @@ type Question struct {
 	Class class
 }
 
+func NewQuestionFromString(n, t, c string) (Question, error) {
+	type_, err := typeFromString(t)
+	if err != nil {
+		return Question{}, err
+	}
+	return Question{Name(n), type_, classOf[c]}, nil
+}
+
+func (q *Question) Bytes() ([]byte, error) {
+	encoded, err := encodeName(q.Name.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	len := len(encoded)
+	bytes := make([]byte, len+4)
+	copy(bytes, encoded)
+	binary.BigEndian.PutUint16(bytes[len:], uint16(q.Type))
+	binary.BigEndian.PutUint16(bytes[len+2:], uint16(q.Class))
+	return bytes, nil
+}
+
+func (q Question) String() string {
+	return fmt.Sprintf("%v %v %v", q.Name, q.Class, q.Type)
+}
+
 var classOf = map[string]class{
 	"IN": 1,
 }
@@ -347,24 +373,6 @@ func (l rdlength) String() string {
 func readRdlength(data []byte, current int) (field, int, error) {
 	rdlength := rdlength(binary.BigEndian.Uint16(data[current:]))
 	return rdlength, current + 2, nil
-}
-
-func (q *Question) Bytes() ([]byte, error) {
-	encoded, err := encodeName(q.Name.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	len := len(encoded)
-	bytes := make([]byte, len+4)
-	copy(bytes, encoded)
-	binary.BigEndian.PutUint16(bytes[len:], uint16(q.Type))
-	binary.BigEndian.PutUint16(bytes[len+2:], uint16(q.Class))
-	return bytes, nil
-}
-
-func (q Question) String() string {
-	return fmt.Sprintf("%v %v %v", q.Name, q.Class, q.Type)
 }
 
 type RData interface {
@@ -662,12 +670,7 @@ type Request struct {
 	MsgSize                   int
 }
 
-func MakeReqMsg(n string, t string, rd bool, edns bool) ([]byte, error) {
-	typeText, err := typeFromString(t)
-	if err != nil {
-		return nil, err
-	}
-	question := Question{Name(n), typeText, classOf["IN"]}
+func MakeReqMsg(question Question, rd bool, edns bool) ([]byte, error) {
 	questionBytes, err := question.Bytes()
 	if err != nil {
 		return nil, err

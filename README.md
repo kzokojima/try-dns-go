@@ -40,7 +40,7 @@ $ dig @127.0.0.1 -p 8053 example.com
 $ pkill -f 0.0.0.0:8053
 ```
 
-### Recursive resolver
+### Full-service resolver
 
 ```
 # start server

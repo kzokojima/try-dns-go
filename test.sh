@@ -81,12 +81,12 @@ test_authoritative_server() {
     pkill -f 0.0.0.0:${DNS_PORT}
 }
 
-test_recursive_resolver() {
+test_resolver() {
     local CMD="dig @127.0.0.1 -p ${DNS_PORT}"
 
     bin/serv -address=0.0.0.0:${DNS_PORT} -zone=named.root 2> /dev/null &
 
-    for each in test/recursive_resolver/*.sh ; do
+    for each in test/resolver/*.sh ; do
         if source $each; then
             echo -e "ok\t${FUNCNAME[0]}\t$each"
         else
@@ -105,7 +105,7 @@ test_go
 ./build.sh
 test_lookup
 test_authoritative_server
-test_recursive_resolver
+test_resolver
 if [[ $status = 0 ]]; then
     echo OK
 else
