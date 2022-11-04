@@ -2,7 +2,6 @@ package dns
 
 import (
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -31,7 +30,7 @@ func LoadRootZone(path string) error {
 }
 
 func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord, error) {
-	log.Printf("[debug] Resolve: question: %v", question)
+	Log.Debugf("Resolve: question: %v", question)
 	nameServer := rootServer
 	if client == nil {
 		client = &Client{Limit: 20}
@@ -44,7 +43,7 @@ func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord,
 	val, ttl, ok := cache.Get(question, now)
 	if ok {
 		// cache hit
-		log.Printf("[debug] Resolve: cache hit")
+		Log.Debugf("Resolve: cache hit")
 		var result []ResourceRecord
 		for _, rr := range val.([]ResourceRecord) {
 			rr.TTL = TTL(ttl)
@@ -53,11 +52,11 @@ func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord,
 		return result, nil
 	} else {
 		// cache miss
-		log.Printf("[debug] Resolve: cache miss")
+		Log.Debugf("Resolve: cache miss")
 	}
 
 	for {
-		log.Printf("[debug] Resolve: nameServer: %v", nameServer)
+		Log.Debugf("Resolve: nameServer: %v", nameServer)
 		res, err := client.Do("udp", nameServer+":53", question, false, false)
 		if err != nil {
 			return nil, err
@@ -70,7 +69,7 @@ func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord,
 				}
 			}
 			cache.Set(question, res.AnswerResourceRecords, now+ttl)
-			log.Printf("[debug] Resolve: cache store")
+			Log.Debugf("Resolve: cache store")
 			return res.AnswerResourceRecords, nil
 		}
 		if len(res.AdditionalResourceRecords) != 0 {
@@ -86,7 +85,7 @@ func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord,
 		}
 		if len(res.AuthorityResourceRecords) != 0 {
 			nsname := res.AuthorityResourceRecords[0].RData.String()
-			log.Printf("[debug] Resolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
+			Log.Debugf("Resolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
 			if len(res.AdditionalResourceRecords) != 0 {
 				var found *ResourceRecord
 				for _, adrr := range res.AdditionalResourceRecords {
@@ -96,7 +95,7 @@ func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord,
 					}
 				}
 				if found != nil {
-					log.Printf("[debug] Resolve: found: %v", found)
+					Log.Debugf("Resolve: found: %v", found)
 					nameServer = found.RData.String()
 					continue
 				}

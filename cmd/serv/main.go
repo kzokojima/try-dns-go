@@ -135,19 +135,19 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFun
 
 	request, err := dns.ParseRequest(req)
 	if err != nil {
-		log.Print("[error] ", err)
+		dns.Log.Error(err)
 		goto Error
 	}
 
 	bytes, err = fn(*request)
 	if err != nil {
-		log.Print("[error] ", err)
+		dns.Log.Error(err)
 		goto Error
 	}
 
 End:
 	conn.WriteTo(bytes, addr)
-	log.Printf("%v %v", addr.String(), len(bytes))
+	dns.Log.Infof("%v %v", addr.String(), len(bytes))
 
 	return
 
@@ -158,7 +158,7 @@ Error:
 
 func main() {
 	log.SetPrefix(path.Base(os.Args[0]) + " ")
-	log.Print("os.Args: ", strings.Join(os.Args, " "))
+	dns.Log.Info("os.Args: ", strings.Join(os.Args, " "))
 
 	var mode string
 	var address string
@@ -171,7 +171,8 @@ func main() {
 
 	conn, err := net.ListenPacket("udp", address)
 	if err != nil {
-		log.Fatal(err)
+		dns.Log.Error(err)
+		os.Exit(1)
 	}
 
 	fn := resolver
@@ -186,7 +187,7 @@ func main() {
 		buf := make([]byte, 1500)
 		n, addr, err := conn.ReadFrom(buf[:])
 		if err != nil {
-			log.Print("[error] ", err)
+			dns.Log.Error(err)
 			continue
 		}
 		go handleConnection(conn, addr, buf[:n], fn)
