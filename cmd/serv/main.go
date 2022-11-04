@@ -24,122 +24,89 @@ func loadZonefiles(path string) error {
 	}
 	for _, v := range zone.Records {
 		key := dns.Question{Name: v.Name, Type: v.Type, Class: v.Class}
-		if _, ok := zoneResourceRecords[key]; !ok {
-			zoneResourceRecords[key] = make([]dns.ResourceRecord, 0)
-		}
 		zoneResourceRecords[key] = append(zoneResourceRecords[key], v)
 	}
-	zoneAuthorities = findResourceRecords(zone.Origin, dns.TypeNS, dns.ClassIN)
+	key := dns.Question{Name: dns.Name(zone.Origin), Type: dns.TypeNS, Class: dns.ClassIN}
+	zoneAuthorities = zoneResourceRecords[key]
 	return nil
 }
 
-func findResourceRecords(name string, type_ dns.Type, class dns.Class) []dns.ResourceRecord {
-	key := dns.Question{Name: dns.Name(name), Type: type_, Class: class}
-	if result, ok := zoneResourceRecords[key]; ok {
-		return result
-	} else {
-		return nil
-	}
+func findResourceRecords(name dns.Name, type_ dns.Type, class dns.Class) []dns.ResourceRecord {
+	return zoneResourceRecords[dns.Question{Name: dns.Name(name), Type: type_, Class: class}]
 }
 
 func getAdditionals(answers []dns.ResourceRecord) []dns.ResourceRecord {
-	var results []dns.ResourceRecord
+	var results1, results2 []dns.ResourceRecord
 	for _, answer := range answers {
 		if answer.Type == dns.TypeMX {
-			additionals := findResourceRecords(answer.RData.(dns.MX).Exchange, dns.TypeA, dns.ClassIN)
-			results = append(results, additionals...)
+			rrs := findResourceRecords(dns.Name(answer.RData.(dns.MX).Exchange), dns.TypeA, dns.ClassIN)
+			results1 = append(results1, rrs...)
+			rrs = findResourceRecords(dns.Name(answer.RData.(dns.MX).Exchange), dns.TypeAAAA, dns.ClassIN)
+			results2 = append(results2, rrs...)
 		}
 	}
-	for _, answer := range answers {
-		if answer.Type == dns.TypeMX {
-			additionals := findResourceRecords(answer.RData.(dns.MX).Exchange, dns.TypeAAAA, dns.ClassIN)
-			results = append(results, additionals...)
-		}
-	}
-	return results
+	return append(results1, results2...)
 }
 
-type ServFunc func(dns.Request) ([]byte, error)
+type ServFunc func(dns.Request) (*dns.Response, error)
 
-func authoritativeServer(req dns.Request) ([]byte, error) {
-	var bytes []byte
+func authoritativeServer(req dns.Request) (*dns.Response, error) {
+	var answers, additionals []dns.ResourceRecord
 
-	if answers, ok := zoneResourceRecords[req.Question]; ok {
-		additionals := getAdditionals(answers)
-		res, err := dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
-		if err != nil {
-			return nil, err
-		}
-		bytes, err = res.Bytes()
-		if err != nil {
-			return nil, err
-		}
+	answers, ok := zoneResourceRecords[req.Question]
+	if ok {
+		additionals = getAdditionals(answers)
 	} else {
 		// CNAME
-		answers := findResourceRecords(string(req.Question.Name), dns.TypeCNAME, dns.ClassIN)
+		answers = findResourceRecords(req.Question.Name, dns.TypeCNAME, dns.ClassIN)
 		if len(answers) == 1 {
 			cname := answers[0]
-			additionals := findResourceRecords(string(cname.RData.(dns.CNAME)), req.Question.Type, dns.ClassIN)
-			answers = append(answers, additionals...)
-			res, err := dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, nil)
-			if err != nil {
-				return nil, err
-			}
-			bytes, err = res.Bytes()
-			if err != nil {
-				return nil, err
-			}
+			rrs := findResourceRecords(cname.RData.(dns.CNAME), req.Question.Type, dns.ClassIN)
+			answers = append(answers, rrs...)
 		} else {
 			return nil, fmt.Errorf("invalid CNAME response")
 		}
 	}
-	return bytes, nil
+	return dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
 }
 
 var cache = dns.NewCache()
 
-func resolver(req dns.Request) ([]byte, error) {
+func resolver(req dns.Request) (*dns.Response, error) {
 	if req.Question.Name == "." && req.Question.Type == dns.TypeNS {
 		// root
 		answers := dns.RootServerNSRRs
 		additionals := dns.RootServers
-		res, err := dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
-		if err != nil {
-			return nil, err
-		}
-		bytes, err := res.Bytes()
-		if err != nil {
-			return nil, err
-		}
-		return bytes, nil
+		return dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
 	}
 
 	rrs, err := dns.Resolve(req.Question, nil, cache)
 	if err != nil {
 		return nil, fmt.Errorf("ERR1")
 	}
-	answers := rrs
-	res, err := dns.MakeResponse(req.Header, req.Question, answers, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	bytes, err := res.Bytes()
-	if err != nil {
-		return nil, err
-	}
-	return bytes, nil
+	return dns.MakeResponse(req.Header, req.Question, rrs, nil, nil)
 }
 
 func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFunc) {
-	var bytes []byte
+	var (
+		bytes    []byte
+		err      error
+		request  *dns.Request
+		response *dns.Response
+	)
 
-	request, err := dns.ParseRequest(req)
+	request, err = dns.ParseRequest(req)
 	if err != nil {
 		dns.Log.Error(err)
 		goto Error
 	}
 
-	bytes, err = fn(*request)
+	response, err = fn(*request)
+	if err != nil {
+		dns.Log.Error(err)
+		goto Error
+	}
+	bytes, err = response.Bytes()
 	if err != nil {
 		dns.Log.Error(err)
 		goto Error
