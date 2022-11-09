@@ -134,6 +134,28 @@ func (h Header) String() string {
 }
 
 const (
+	QR       uint16 = 1 << 15
+	AA       uint16 = 1 << 10
+	TC       uint16 = 1 << 9
+	RD       uint16 = 1 << 8
+	RA       uint16 = 1 << 7
+	NOERROR  uint16 = 0
+	FORMERR  uint16 = 1
+	SERVFAIL uint16 = 2
+	NXDOMAIN uint16 = 3
+	NOTIMP   uint16 = 3
+	REFUSED  uint16 = 4
+)
+
+func MakeHeaderFields(opcode uint16, vals ...uint16) uint16 {
+	var val = opcode << 11
+	for _, v := range vals {
+		val |= v
+	}
+	return val
+}
+
+const (
 	labelLenMax      = 63
 	domainNameLenMax = 253
 )
@@ -570,13 +592,11 @@ type Response struct {
 	RawMsg                    []byte
 }
 
-func MakeResponse(reqHeader Header, question Question,
+func MakeResponse(id uint16, fields uint16, question Question,
 	answers []ResourceRecord, authorities []ResourceRecord, additionals []ResourceRecord) (*Response, error) {
 	resHeader := Header{
-		ID: reqHeader.ID,
-		Fields: 1<<15 | // QR
-			reqHeader.Opcode()<<11 | // OPCODE
-			0, // RCODE
+		ID:      id,
+		Fields:  fields,
 		QDCount: 1,
 		ANCount: uint16(len(answers)),
 		NSCount: uint16(len(authorities)),
@@ -643,22 +663,6 @@ func (res *Response) Bytes() ([]byte, error) {
 		bytes = append(bytes, rrBytes...)
 	}
 	return bytes, nil
-}
-
-func MakeErrResMsg(request *Request) []byte {
-	resHeader := Header{
-		ID: request.Header.ID,
-		Fields: 1<<15 | // QR
-			request.Header.Opcode()<<11 | // OPCODE
-			3, // RCODE(NXDOMAIN)
-		QDCount: 1,
-	}
-	qbytes, err := request.Question.Bytes()
-	if err != nil {
-		return nil
-	}
-	res := append(resHeader.Bytes(), qbytes...)
-	return res
 }
 
 const udpSize = 1500

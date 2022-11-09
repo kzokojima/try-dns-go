@@ -7,23 +7,6 @@ import (
 	"testing"
 )
 
-func TestMakeErrRes(t *testing.T) {
-	req := Request{
-		Header{},
-		Question{"example.com.", TypeA, ClassIN},
-		nil,
-		0,
-	}
-	res := MakeErrResMsg(&req)
-	if len(res) == 0 {
-		t.Error("len(res) == 0")
-	}
-	_, err := ParseResMsg(res)
-	if err != nil {
-		t.Error(err)
-	}
-}
-
 func TestParseRequest(t *testing.T) {
 	reqMsg, err := MakeReqMsg(Question{Name("example.com"), TypeA, ClassIN}, true, true)
 	if err != nil {
@@ -54,7 +37,7 @@ func TestResponseBytes(t *testing.T) {
 			{Name("mx1.example.com."), TypeAAAA, ClassIN, 600, AAAA(netip.MustParseAddr("2001:db8::3"))},
 			{Name("mx2.example.com."), TypeAAAA, ClassIN, 600, AAAA(netip.MustParseAddr("2001:db8::4"))},
 		}
-		res, err := MakeResponse(Header{}, Question{Name("example.com."), TypeMX, ClassIN}, answers, authorities, additionals)
+		res, err := MakeResponse(0, 0, Question{Name("example.com."), TypeMX, ClassIN}, answers, authorities, additionals)
 		if err != nil {
 			t.Error(err)
 		}
@@ -76,7 +59,7 @@ func TestResponseBytes(t *testing.T) {
 			{Name("example.com."), TypeNS, ClassIN, 3600, NS("ns1.example.com.")},
 			{Name("example.com."), TypeNS, ClassIN, 3600, NS("ns2.example.com.")},
 		}
-		res, err := MakeResponse(Header{}, Question{Name("www.example.com."), TypeA, ClassIN}, answers, authorities, nil)
+		res, err := MakeResponse(0, 0, Question{Name("www.example.com."), TypeA, ClassIN}, answers, authorities, nil)
 		if err != nil {
 			t.Error(err)
 		}

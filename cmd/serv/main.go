@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -64,10 +63,14 @@ func authoritativeServer(req dns.Request) (*dns.Response, error) {
 			rrs := findResourceRecords(cname.RData.(dns.CNAME), req.Question.Type, dns.ClassIN)
 			answers = append(answers, rrs...)
 		} else {
-			return nil, fmt.Errorf("invalid CNAME response")
+			return dns.MakeResponse(req.Header.ID,
+				dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.NXDOMAIN),
+				req.Question, nil, nil, nil)
 		}
 	}
-	return dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
+	return dns.MakeResponse(req.Header.ID,
+		dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.AA, dns.NOERROR),
+		req.Question, answers, zoneAuthorities, additionals)
 }
 
 var cache = dns.NewCache()
@@ -77,14 +80,20 @@ func resolver(req dns.Request) (*dns.Response, error) {
 		// root
 		answers := dns.RootServerNSRRs
 		additionals := dns.RootServers
-		return dns.MakeResponse(req.Header, req.Question, answers, zoneAuthorities, additionals)
+		return dns.MakeResponse(req.Header.ID,
+			dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.AA, dns.RD, dns.RA, dns.NOERROR),
+			req.Question, answers, zoneAuthorities, additionals)
 	}
 
 	rrs, err := dns.Resolve(req.Question, nil, cache)
 	if err != nil {
-		return nil, fmt.Errorf("ERR1")
+		return dns.MakeResponse(req.Header.ID,
+			dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.RD, dns.RA, dns.NXDOMAIN),
+			req.Question, nil, nil, nil)
 	}
-	return dns.MakeResponse(req.Header, req.Question, rrs, nil, nil)
+	return dns.MakeResponse(req.Header.ID,
+		dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.RD, dns.RA, dns.NOERROR),
+		req.Question, rrs, nil, nil)
 }
 
 func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFunc) {
@@ -98,29 +107,22 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFun
 	request, err = dns.ParseRequest(req)
 	if err != nil {
 		dns.Log.Error(err)
-		goto Error
+		return
 	}
 
 	response, err = fn(*request)
 	if err != nil {
 		dns.Log.Error(err)
-		goto Error
+		return
 	}
 	bytes, err = response.Bytes()
 	if err != nil {
 		dns.Log.Error(err)
-		goto Error
+		return
 	}
 
-End:
 	conn.WriteTo(bytes, addr)
 	dns.Log.Infof("%v %v", addr.String(), len(bytes))
-
-	return
-
-Error:
-	bytes = dns.MakeErrResMsg(request)
-	goto End
 }
 
 func main() {

@@ -34,7 +34,7 @@ $ bin/lookup -x 2606:4700:4700::1111
 $ bin/serv -address=0.0.0.0:8053 -mode=authoritative -zone=testdata/zones/example.com.zone &
 
 # lookup
-$ dig @127.0.0.1 -p 8053 example.com
+$ dig @127.0.0.1 -p 8053 +norec example.com
 
 # stop server
 $ pkill -f 0.0.0.0:8053
@@ -73,7 +73,7 @@ $ docker compose down
 Run:
 
 ```
-$ go run ./cmd/lookup @127.0.0.1 -p 8053 example.com
+$ go run ./cmd/lookup @127.0.0.1 -p 8053 +norec example.com
 ```
 
 ## References
