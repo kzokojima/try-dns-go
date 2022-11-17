@@ -7,12 +7,16 @@ import (
 	"time"
 )
 
-type Client struct {
+type Client interface {
+	Do(network string, address string, question Question, rec bool, edns bool) (*Response, error)
+}
+
+type BasicClient struct {
 	Limit int
 	count int
 }
 
-func (c *Client) Do(network string, address string, question Question, rec bool, edns bool) (*Response, error) {
+func (c *BasicClient) Do(network string, address string, question Question, rec bool, edns bool) (*Response, error) {
 	c.count++
 	if 1 <= c.Limit && c.Limit < c.count {
 		return nil, fmt.Errorf("exceed count")

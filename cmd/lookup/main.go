@@ -223,7 +223,7 @@ func main() {
 	if opts.tcp {
 		network = "tcp"
 	}
-	client := dns.Client{}
+	client := dns.BasicClient{}
 	question, err := dns.NewQuestionFromString(opts.name, opts.type_, "IN")
 	if err != nil {
 		die(err)

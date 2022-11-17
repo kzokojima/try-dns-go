@@ -29,11 +29,11 @@ func LoadRootZone(path string) error {
 	return nil
 }
 
-func Resolve(question Question, client *Client, cache *Cache) ([]ResourceRecord, error) {
+func Resolve(question Question, client Client, cache *Cache) ([]ResourceRecord, error) {
 	Log.Debugf("Resolve: question: %v", question)
 	nameServer := rootServer
 	if client == nil {
-		client = &Client{Limit: 20}
+		client = &BasicClient{Limit: 20}
 	}
 	if cache == nil {
 		cache = NewCache()
