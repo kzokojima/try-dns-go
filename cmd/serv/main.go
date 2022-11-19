@@ -85,7 +85,7 @@ func resolver(req dns.Request) (*dns.Response, error) {
 			req.Question, answers, zoneAuthorities, additionals)
 	}
 
-	rrs, err := dns.Resolve(req.Question, nil, cache)
+	rrs, err := dns.Resolve(req.Question, true, nil, cache)
 	if err != nil {
 		return dns.MakeResponse(req.Header.ID,
 			dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.RD, dns.RA, dns.NXDOMAIN),

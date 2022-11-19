@@ -3,6 +3,7 @@ package dns
 import (
 	"bytes"
 	"net/netip"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -134,5 +135,15 @@ func TestEncodeName(t *testing.T) {
 		if !bytes.Equal(encoded, v.expected) {
 			t.Error(v, encoded)
 		}
+	}
+}
+func TestNameAncestors(t *testing.T) {
+	expected := []string{
+		"com.",
+		"example.com.",
+	}
+	actual := Name("www.example.com.").ancestors()
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("actual: %v", actual)
 	}
 }

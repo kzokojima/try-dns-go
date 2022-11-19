@@ -29,7 +29,9 @@ func LoadRootZone(path string) error {
 	return nil
 }
 
-func Resolve(question Question, client Client, cache *Cache) ([]ResourceRecord, error) {
+const QNameMinType = TypeNS
+
+func Resolve(question Question, qNameMin bool, client Client, cache *Cache) ([]ResourceRecord, error) {
 	Log.Debugf("Resolve: question: %v", question)
 	nameServer := rootServer
 	if client == nil {
@@ -52,29 +54,27 @@ func Resolve(question Question, client Client, cache *Cache) ([]ResourceRecord, 
 		Log.Debugf("Resolve: cache miss")
 	}
 
-	for {
-		Log.Debugf("Resolve: nameServer: %v", nameServer)
-		res, err := client.Do("udp", nameServer+":53", question, false, false)
+	// find name server
+	domains := append(question.Name.ancestors(), question.Name.String())
+LOOP:
+	for _, pname := range domains {
+		pquestion := question
+		if qNameMin {
+			pquestion = Question{Name(pname), QNameMinType, ClassIN}
+		}
+		Log.Debugf("Resolve: send request: @%v %v", nameServer, pquestion)
+		res, err := client.Do("udp", nameServer+":53", pquestion, false, false)
 		if err != nil {
 			return nil, err
 		}
 		answerRRSets := NewRRSets(res.AnswerResourceRecords)
-		for k, v := range answerRRSets {
-			cache.Set(k, v, now+int64(v.TTL))
-			Log.Debugf("Resolve: cache store: %v", k)
-		}
 		authorityRRSets := NewRRSets(res.AuthorityResourceRecords)
-		for k, v := range authorityRRSets {
-			cache.Set(k, v, now+int64(v.TTL))
-			Log.Debugf("Resolve: cache store: %v", k)
-		}
 		additionalRRSets := NewRRSets(res.AdditionalResourceRecords)
-		for k, v := range additionalRRSets {
-			cache.Set(k, v, now+int64(v.TTL))
-			Log.Debugf("Resolve: cache store: %v", k)
-		}
+		storeRRSets(answerRRSets, cache, now)
+		storeRRSets(authorityRRSets, cache, now)
+		storeRRSets(additionalRRSets, cache, now)
 
-		if len(res.AnswerResourceRecords) != 0 {
+		if len(res.AnswerResourceRecords) != 0 && pquestion == question {
 			return res.AnswerResourceRecords, nil
 		}
 
@@ -84,18 +84,32 @@ func Resolve(question Question, client Client, cache *Cache) ([]ResourceRecord, 
 		}
 
 		if len(res.AuthorityResourceRecords) != 0 {
-			Log.Debugf("Resolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
-			nsname := res.AuthorityResourceRecords[0].RData.(NS)
-			question := Question{nsname, TypeA, ClassIN}
-			rrSet, ok := additionalRRSets[question]
-			if ok {
-				rrs := rrSet.ResourceRecords()
-				Log.Debugf("Resolve: found: %v", rrs[0])
-				nameServer = rrs[0].RData.String()
-				continue
+			for _, authorityRRSet := range authorityRRSets {
+				// find glue record
+				for _, v := range authorityRRSet.RDatas {
+					nsname, ok := v.(NS)
+					if ok {
+						rrSet, ok := additionalRRSets[Question{nsname, TypeA, ClassIN}]
+						if ok {
+							rrs := rrSet.ResourceRecords()
+							nameServer = rrs[0].RData.String()
+							continue LOOP
+						}
+					}
+				}
 			}
 
-			rrs, err := Resolve(question, client, cache)
+			Log.Debugf("Resolve: res.AuthorityResourceRecords[0]: %v", res.AuthorityResourceRecords[0])
+			nsname, ok := res.AuthorityResourceRecords[0].RData.(NS)
+			if !ok {
+				if qNameMin {
+					continue
+				} else {
+					return nil, fmt.Errorf("ERR")
+				}
+			}
+			question := Question{nsname, TypeA, ClassIN}
+			rrs, err := Resolve(question, qNameMin, client, cache)
 			if err != nil {
 				return nil, err
 			}
@@ -103,8 +117,28 @@ func Resolve(question Question, client Client, cache *Cache) ([]ResourceRecord, 
 				return nil, fmt.Errorf("ERR")
 			}
 			nameServer = rrs[0].RData.String()
-		} else {
-			return nil, fmt.Errorf("ERR")
+			continue
 		}
+		return nil, fmt.Errorf("ERR")
+	}
+
+	Log.Debugf("Resolve: send request1: @%v %v", nameServer, question)
+	res, err := client.Do("udp", nameServer+":53", question, false, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(res.AnswerResourceRecords) != 0 {
+		answerRRSets := NewRRSets(res.AnswerResourceRecords)
+		storeRRSets(answerRRSets, cache, now)
+		Log.Debugf("Resolve: return: %v", res.AnswerResourceRecords)
+		return res.AnswerResourceRecords, nil
+	}
+
+	return nil, fmt.Errorf("ERR2")
+}
+
+func storeRRSets(rrSets RRSets, cache *Cache, now int64) {
+	for k, v := range rrSets {
+		cache.Set(k, v, now+int64(v.TTL))
 	}
 }

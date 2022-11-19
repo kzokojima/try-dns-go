@@ -162,6 +162,25 @@ const (
 
 type Name string
 
+func (n Name) ancestors() []string {
+	var names []string
+	labels := n.labels()
+	for i := len(labels) - 1; 0 < i; i-- {
+		name := labels[i]
+		if 0 < len(names) {
+			name = name + "." + names[len(names)-1]
+		} else {
+			name = name + "."
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+func (n Name) labels() []string {
+	return strings.Split(strings.TrimRight(string(n), "."), ".")
+}
+
 func (n Name) MarshalBinary(msg []byte) (data []byte, err error) {
 	return encodeName(string(n), msg)
 }

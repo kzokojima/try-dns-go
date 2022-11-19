@@ -83,6 +83,7 @@ $ go run ./cmd/lookup @127.0.0.1 -p 8053 +norec example.com
 * [RFC 4034 Resource Records for the DNS Security Extensions](https://www.rfc-editor.org/info/rfc4034)
 * [RFC 4035 Protocol Modifications for the DNS Security Extensions](https://www.rfc-editor.org/info/rfc4035)
 * [RFC 6891 Extension Mechanisms for DNS (EDNS(0))](https://www.rfc-editor.org/info/rfc6891)
+* [RFC 9156 DNS Query Name Minimisation to Improve Privacy](https://www.rfc-editor.org/info/rfc9156)
 * [JPRS DNS関連技術情報#DNS関連のRFC](https://jprs.jp/tech/index.html#dns-rfc-info)
 * [DNSパケットフォーマットと、DNSパケットの作り方](https://atmarkit.itmedia.co.jp/ait/articles/1601/29/news014.html)
 * [教科書には載っていないDNS](https://dnsops.jp/event/20130719/20130719-undocumented-DNS-orange-6.pdf)
