@@ -1,4 +1,4 @@
-# DNS programs
+# DNS program study
 
 ## Build
 
@@ -27,7 +27,18 @@ $ bin/lookup -x 1.1.1.1
 $ bin/lookup -x 2606:4700:4700::1111
 ```
 
-### Authoritative server
+### Name server
+
+#### Options
+
+* -address=\<address\>:\<port\>
+    * Set to the listen address and port.
+* -mode=\<mode\>
+    * Set the server mode. The default mode is full-service resolver. Sets the "authoritative" is authoritative server.
+* -zone=\<zone file\>
+    * Set the zone file. If mode is full-service resolver, specify root hints file ([IANA Root Files](https://www.iana.org/domains/root/files)).
+
+#### Authoritative server
 
 ```
 # start server
@@ -40,7 +51,7 @@ $ dig @127.0.0.1 -p 8053 +norec example.com
 $ pkill -f 0.0.0.0:8053
 ```
 
-### Full-service resolver
+#### Full-service resolver
 
 ```
 # start server
