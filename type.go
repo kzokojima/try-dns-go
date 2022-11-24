@@ -1,6 +1,8 @@
 package dns
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"net/netip"
@@ -259,7 +261,7 @@ type DNSKEY struct {
 	flags uint16
 	proto byte
 	algo  byte
-	key   string
+	key   []byte
 }
 
 func newDNSKEY(fields []string) (*DNSKEY, error) {
@@ -275,19 +277,40 @@ func newDNSKEY(fields []string) (*DNSKEY, error) {
 	if err != nil {
 		return nil, err
 	}
+	key, err := base64.StdEncoding.DecodeString(fields[3])
+	if err != nil {
+		return nil, err
+	}
 	return &DNSKEY{
 		uint16(v0),
 		byte(v1),
 		byte(v2),
-		fields[3],
+		key,
 	}, nil
 }
 
 func (dnskey DNSKEY) MarshalBinary(msg []byte) (data []byte, err error) {
-	// TODO
+	data = make([]byte, 4+len(dnskey.key))
+	binary.BigEndian.PutUint16(data, dnskey.flags)
+	data[2] = dnskey.proto
+	data[3] = dnskey.algo
+	copy(data[4:], dnskey.key)
 	return
 }
 
 func (dnskey DNSKEY) String() string {
 	return fmt.Sprintf("%v %v %v %v", dnskey.flags, dnskey.proto, dnskey.algo, dnskey.key)
+}
+
+func (dnskey DNSKEY) Digest(name string) ([]byte, error) {
+	namebytes, err := encodeName(name, nil)
+	if err != nil {
+		return nil, err
+	}
+	dnskeybytes, err := dnskey.MarshalBinary(nil)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(append(namebytes, dnskeybytes...))
+	return sum[:], nil
 }

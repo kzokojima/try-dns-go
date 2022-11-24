@@ -554,7 +554,7 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		}
 		algo := data[current+3]
 		key := data[current+4 : current+int(rdlength)]
-		rdata = DNSKEY{flags, proto, algo, base64.StdEncoding.EncodeToString(key)}
+		rdata = DNSKEY{flags, proto, algo, key}
 	default:
 		rdata = RDataStr(fmt.Sprintf("unknown type: %v, rdlength: %v", type_, rdlength))
 	}
