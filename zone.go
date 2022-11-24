@@ -132,7 +132,25 @@ func ReadZonefile(path string) (*Zone, error) {
 				}
 				rdata = *aaaa
 			} else {
-				return nil, fmt.Errorf("invalid format: %v", fields)
+				m := map[string]struct {
+					Type
+					fn func([]string) (RData, error)
+				}{
+					"DS":     {TypeDS, func(s []string) (RData, error) { return newDS(s) }},
+					"RRSIG":  {TypeRRSIG, func(s []string) (RData, error) { return newRRSIG(s) }},
+					"DNSKEY": {TypeDNSKEY, func(s []string) (RData, error) { return newDNSKEY(s) }},
+					"NSEC":   {TypeNSEC, func(s []string) (RData, error) { return newNSEC(s) }},
+				}
+				v, ok := m[fields[0]]
+				if !ok {
+					return nil, fmt.Errorf("invalid format: %v", fields)
+				}
+				type_ = v.Type
+				data, err := v.fn(fields[1:])
+				if err != nil {
+					return nil, fmt.Errorf("invalid format: %v", fields)
+				}
+				rdata = data
 			}
 
 			zone.Records = append(zone.Records, ResourceRecord{

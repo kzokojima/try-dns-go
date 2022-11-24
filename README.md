@@ -55,7 +55,7 @@ $ pkill -f 0.0.0.0:8053
 
 ```
 # start server
-$ bin/serv -address=0.0.0.0:8053 -zone=named.root &
+$ bin/serv -address=0.0.0.0:8053 -zone=root_files/named.root &
 
 # lookup
 $ dig @127.0.0.1 -p 8053 example.com

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net/netip"
+	"strconv"
 	"strings"
 )
 
@@ -150,6 +151,27 @@ type DS struct {
 	digest     []byte
 }
 
+func newDS(fields []string) (*DS, error) {
+	v0, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return nil, err
+	}
+	v1, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return nil, err
+	}
+	v2, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return nil, err
+	}
+	return &DS{
+		uint16(v0),
+		byte(v1),
+		byte(v2),
+		[]byte(fields[3]),
+	}, nil
+}
+
 func (ds DS) MarshalBinary(msg []byte) (data []byte, err error) {
 	// TODO
 	return
@@ -170,6 +192,36 @@ type RRSIG struct {
 	signature           string
 }
 
+func newRRSIG(fields []string) (*RRSIG, error) {
+	v1, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return nil, err
+	}
+	v2, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return nil, err
+	}
+	v3, err := strconv.Atoi(fields[3])
+	if err != nil {
+		return nil, err
+	}
+	v6, err := strconv.Atoi(fields[6])
+	if err != nil {
+		return nil, err
+	}
+	return &RRSIG{
+		fields[0],
+		byte(v1),
+		byte(v2),
+		uint32(v3),
+		fields[4],
+		fields[5],
+		uint16(v6),
+		fields[7],
+		fields[8],
+	}, nil
+}
+
 func (rrsig RRSIG) MarshalBinary(msg []byte) (data []byte, err error) {
 	// TODO
 	return
@@ -187,6 +239,13 @@ type NSEC struct {
 	typeTexts      string
 }
 
+func newNSEC(fields []string) (*NSEC, error) {
+	return &NSEC{
+		fields[0],
+		fields[1],
+	}, nil
+}
+
 func (nsec NSEC) MarshalBinary(msg []byte) (data []byte, err error) {
 	// TODO
 	return
@@ -201,6 +260,27 @@ type DNSKEY struct {
 	proto byte
 	algo  byte
 	key   string
+}
+
+func newDNSKEY(fields []string) (*DNSKEY, error) {
+	v0, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return nil, err
+	}
+	v1, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return nil, err
+	}
+	v2, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return nil, err
+	}
+	return &DNSKEY{
+		uint16(v0),
+		byte(v1),
+		byte(v2),
+		fields[3],
+	}, nil
 }
 
 func (dnskey DNSKEY) MarshalBinary(msg []byte) (data []byte, err error) {

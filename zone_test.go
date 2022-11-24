@@ -32,3 +32,10 @@ func TestReadZonefile(t *testing.T) {
 		}
 	}
 }
+
+func TestReadRootZoneFile(t *testing.T) {
+	_, err := ReadZonefile("root_files/root.zone")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
