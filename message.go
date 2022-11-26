@@ -3,7 +3,6 @@ package dns
 import (
 	"bytes"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"net/netip"
@@ -490,7 +489,7 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		retry := binary.BigEndian.Uint32(data[next+8:])
 		expire := binary.BigEndian.Uint32(data[next+12:])
 		minimum := binary.BigEndian.Uint32(data[next+16:])
-		rdata = SOA{mname.String(), rname.String(), serial, refresh, retry, expire, minimum}
+		rdata = SOA{mname.(Name), rname.(Name), serial, refresh, retry, expire, minimum}
 	case TypeTXT:
 		texts := decodeTexts(data, current, current+int(rdlength))
 		for i, v := range texts {
@@ -510,8 +509,8 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		algo := data[current+2]
 		labels := data[current+3]
 		originalTtl := binary.BigEndian.Uint32(data[current+4:])
-		signatureExpiration := time.Unix(int64(binary.BigEndian.Uint32(data[current+8:])), 0).UTC()
-		signatureInception := time.Unix(int64(binary.BigEndian.Uint32(data[current+12:])), 0).UTC()
+		signatureExpiration := binary.BigEndian.Uint32(data[current+8:])
+		signatureInception := binary.BigEndian.Uint32(data[current+12:])
 		keyTag := binary.BigEndian.Uint16(data[current+16:])
 		decoded, next, err := decodeName(data, current+18)
 		if err != nil {
@@ -519,10 +518,9 @@ func parseResourceRecord(data []byte, current int) (*ResourceRecord, int, error)
 		}
 		signerName := decoded.String()
 		signature := data[next : current+int(rdlength)]
-		const LAYOUT = "20060102150405"
-		rdata = RRSIG{typeCovered.String(), algo, labels, originalTtl,
-			signatureExpiration.Format(LAYOUT), signatureInception.Format(LAYOUT),
-			keyTag, signerName, base64.StdEncoding.EncodeToString(signature)}
+		rdata = RRSIG{typeCovered.(Type), algo, labels, originalTtl,
+			signatureExpiration, signatureInception,
+			keyTag, Name(signerName), signature}
 	case TypeNSEC:
 		decoded, next, err := decodeName(data, current)
 		if err != nil {
@@ -582,7 +580,7 @@ func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
 	binary.BigEndian.PutUint32(bytes[l+4:], uint32(rr.TTL))
 	var rdata []byte
 	switch rr.Type {
-	case TypeA, TypeNS, TypeCNAME, TypeMX, TypeTXT, TypeAAAA:
+	case TypeA, TypeNS, TypeCNAME, TypeSOA, TypeMX, TypeTXT, TypeAAAA, TypeDNSKEY:
 		rdata, err = rr.RData.MarshalBinary(msg)
 		if err != nil {
 			return nil, err

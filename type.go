@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Type uint16
@@ -72,8 +73,8 @@ type NS = Name
 type CNAME = Name
 
 type SOA struct {
-	mname   string
-	rname   string
+	mname   Name
+	rname   Name
 	serial  uint32
 	refresh uint32
 	retry   uint32
@@ -81,8 +82,55 @@ type SOA struct {
 	minimum uint32
 }
 
+func newSOA(fields []string) (*SOA, error) {
+	v2, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return nil, err
+	}
+	v3, err := strconv.Atoi(fields[3])
+	if err != nil {
+		return nil, err
+	}
+	v4, err := strconv.Atoi(fields[4])
+	if err != nil {
+		return nil, err
+	}
+	v5, err := strconv.Atoi(fields[5])
+	if err != nil {
+		return nil, err
+	}
+	v6, err := strconv.Atoi(fields[6])
+	if err != nil {
+		return nil, err
+	}
+	return &SOA{
+		Name(fields[0]),
+		Name(fields[1]),
+		uint32(v2),
+		uint32(v3),
+		uint32(v4),
+		uint32(v5),
+		uint32(v6),
+	}, nil
+}
+
 func (soa SOA) MarshalBinary(msg []byte) (data []byte, err error) {
-	// TODO
+	mname, err := encodeName(soa.mname.String(), msg)
+	if err != nil {
+		return nil, err
+	}
+	rname, err := encodeName(soa.rname.String(), msg)
+	if err != nil {
+		return nil, err
+	}
+	data = make([]byte, 20+len(mname)+len(rname))
+	copy(data, mname)
+	copy(data[len(mname):], rname)
+	binary.BigEndian.PutUint32(data[len(mname)+len(rname):], soa.serial)
+	binary.BigEndian.PutUint32(data[len(mname)+len(rname)+4:], soa.refresh)
+	binary.BigEndian.PutUint32(data[len(mname)+len(rname)+8:], soa.retry)
+	binary.BigEndian.PutUint32(data[len(mname)+len(rname)+12:], soa.expire)
+	binary.BigEndian.PutUint32(data[len(mname)+len(rname)+16:], soa.minimum)
 	return
 }
 
@@ -183,18 +231,24 @@ func (ds DS) String() string {
 }
 
 type RRSIG struct {
-	typeCovered         string
-	algo                byte
-	labels              byte
-	originalTtl         uint32
-	signatureExpiration string
-	signatureInception  string
-	keyTag              uint16
-	signerName          string
-	signature           string
+	TypeCovered         Type
+	Algo                byte
+	Labels              byte
+	OriginalTtl         uint32
+	SignatureExpiration uint32
+	SignatureInception  uint32
+	KeyTag              uint16
+	SignerName          Name
+	Signature           []byte
 }
 
+const TimeLayout = "20060102150405"
+
 func newRRSIG(fields []string) (*RRSIG, error) {
+	v0, err := typeFromString(fields[0])
+	if err != nil {
+		return nil, err
+	}
 	v1, err := strconv.Atoi(fields[1])
 	if err != nil {
 		return nil, err
@@ -207,20 +261,32 @@ func newRRSIG(fields []string) (*RRSIG, error) {
 	if err != nil {
 		return nil, err
 	}
+	v4, err := time.Parse(TimeLayout, fields[4])
+	if err != nil {
+		return nil, err
+	}
+	v5, err := time.Parse(TimeLayout, fields[5])
+	if err != nil {
+		return nil, err
+	}
 	v6, err := strconv.Atoi(fields[6])
 	if err != nil {
 		return nil, err
 	}
+	v8, err := base64.StdEncoding.DecodeString(fields[8])
+	if err != nil {
+		return nil, err
+	}
 	return &RRSIG{
-		fields[0],
+		v0,
 		byte(v1),
 		byte(v2),
 		uint32(v3),
-		fields[4],
-		fields[5],
+		uint32(v4.Unix()),
+		uint32(v5.Unix()),
 		uint16(v6),
-		fields[7],
-		fields[8],
+		Name(fields[7]),
+		v8,
 	}, nil
 }
 
@@ -229,11 +295,30 @@ func (rrsig RRSIG) MarshalBinary(msg []byte) (data []byte, err error) {
 	return
 }
 
+func (rrsig RRSIG) MarshalBinaryWithoutSig() (data []byte, err error) {
+	signerName, err := encodeName(rrsig.SignerName.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	data = make([]byte, 18+len(signerName))
+	binary.BigEndian.PutUint16(data, uint16(rrsig.TypeCovered))
+	data[2] = rrsig.Algo
+	data[3] = rrsig.Labels
+	binary.BigEndian.PutUint32(data[4:], rrsig.OriginalTtl)
+	binary.BigEndian.PutUint32(data[8:], rrsig.SignatureExpiration)
+	binary.BigEndian.PutUint32(data[12:], rrsig.SignatureInception)
+	binary.BigEndian.PutUint16(data[16:], rrsig.KeyTag)
+	copy(data[18:], signerName)
+	return
+}
+
 func (rrsig RRSIG) String() string {
 	return fmt.Sprintf("%v %v %v %v %v %v %v %v %v",
-		rrsig.typeCovered, rrsig.algo, rrsig.labels, rrsig.originalTtl,
-		rrsig.signatureExpiration, rrsig.signatureInception,
-		rrsig.keyTag, rrsig.signerName, rrsig.signature)
+		rrsig.TypeCovered, rrsig.Algo, rrsig.Labels, rrsig.OriginalTtl,
+		time.Unix(int64(rrsig.SignatureExpiration), 0).UTC().Format(TimeLayout),
+		time.Unix(int64(rrsig.SignatureInception), 0).UTC().Format(TimeLayout),
+		rrsig.KeyTag, rrsig.SignerName,
+		base64.StdEncoding.EncodeToString(rrsig.Signature))
 }
 
 type NSEC struct {
@@ -258,10 +343,10 @@ func (nsec NSEC) String() string {
 }
 
 type DNSKEY struct {
-	flags uint16
-	proto byte
-	algo  byte
-	key   []byte
+	Flags uint16
+	Proto byte
+	Algo  byte
+	Key   []byte
 }
 
 func newDNSKEY(fields []string) (*DNSKEY, error) {
@@ -290,16 +375,16 @@ func newDNSKEY(fields []string) (*DNSKEY, error) {
 }
 
 func (dnskey DNSKEY) MarshalBinary(msg []byte) (data []byte, err error) {
-	data = make([]byte, 4+len(dnskey.key))
-	binary.BigEndian.PutUint16(data, dnskey.flags)
-	data[2] = dnskey.proto
-	data[3] = dnskey.algo
-	copy(data[4:], dnskey.key)
+	data = make([]byte, 4+len(dnskey.Key))
+	binary.BigEndian.PutUint16(data, dnskey.Flags)
+	data[2] = dnskey.Proto
+	data[3] = dnskey.Algo
+	copy(data[4:], dnskey.Key)
 	return
 }
 
 func (dnskey DNSKEY) String() string {
-	return fmt.Sprintf("%v %v %v %v", dnskey.flags, dnskey.proto, dnskey.algo, dnskey.key)
+	return fmt.Sprintf("%v %v %v %v", dnskey.Flags, dnskey.Proto, dnskey.Algo, dnskey.Key)
 }
 
 func (dnskey DNSKEY) Digest(name string) ([]byte, error) {

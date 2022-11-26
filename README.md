@@ -91,6 +91,7 @@ $ go run ./cmd/lookup @127.0.0.1 -p 8053 +norec example.com
 
 * [RFC 1034 Domain names - concepts and facilities](https://www.rfc-editor.org/info/rfc1034)
 * [RFC 1035 Domain names - implementation and specification](https://www.rfc-editor.org/info/rfc1035)
+* [RFC 3110 RSA/SHA-1 SIGs and RSA KEYs in the Domain Name System (DNS)](https://www.rfc-editor.org/info/rfc3110)
 * [RFC 4034 Resource Records for the DNS Security Extensions](https://www.rfc-editor.org/info/rfc4034)
 * [RFC 4035 Protocol Modifications for the DNS Security Extensions](https://www.rfc-editor.org/info/rfc4035)
 * [RFC 5702 Use of SHA-2 Algorithms with RSA in DNSKEY and RRSIG Resource Records for DNSSEC](https://www.rfc-editor.org/info/rfc5702)

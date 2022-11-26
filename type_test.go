@@ -2,8 +2,21 @@ package dns
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestRRSIG(t *testing.T) {
+	rrsigText := "DNSKEY 8 0 172800 20221211000000 20221120000000 20326 . Y8Or1olHbjYMKfZxcKA8mP9+GWhl66Cu6Mrjh9NzLuBZ+14JZodwSJ5JaXzJxRzgHxTd/TWvnI4bAM/DQ8NYyRX/QezQdGU4ZE5RcrZLanxuX/FQR/qIMlLttCsoPtlM677HA3CecqLljbrcayIDSKMghh5iKV1iOoW1BP1KZwgH4Y87fiWbevk+AmN5xbJCPk1iCis+kMulacxTFC+g0jyLv1V0C2hneqZ58os/QvW7XNBWLd9OC1LbMVVkfgUsVYqfwLjcieQ5YVRshfy2Iazv2sLo87sGvBnLmSUx8F4hiotEK6UjTNNun1tKe0VTBVkXQyaIzfUOkPgoMoWojg=="
+	rrsig, err := newRRSIG(strings.Split(rrsigText, " "))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := rrsig.String()
+	if s != rrsigText {
+		t.Fatal(s)
+	}
+}
 
 func TestDNSKeyDigest(t *testing.T) {
 	// root KSK
