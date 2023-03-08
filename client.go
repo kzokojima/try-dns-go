@@ -8,7 +8,7 @@ import (
 )
 
 type Client interface {
-	Do(network string, address string, question Question, rec bool, edns bool) (*Response, error)
+	Do(network string, address string, question Question, rec bool, edns bool, dnssec bool) (*Response, error)
 }
 
 type BasicClient struct {
@@ -16,12 +16,12 @@ type BasicClient struct {
 	count int
 }
 
-func (c *BasicClient) Do(network string, address string, question Question, rec bool, edns bool) (*Response, error) {
+func (c *BasicClient) Do(network string, address string, question Question, rec bool, edns bool, dnssec bool) (*Response, error) {
 	c.count++
 	if 1 <= c.Limit && c.Limit < c.count {
 		return nil, fmt.Errorf("exceed count")
 	}
-	reqMsg, err := MakeReqMsg(question, rec, edns)
+	reqMsg, err := MakeReqMsg(question, rec, edns, dnssec)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (c *BasicClient) Do(network string, address string, question Question, rec 
 	if err != nil {
 		return nil, err
 	}
-	var buf [udpSize]byte
+	var buf [UDPSize]byte
 	len, err := conn.Read(buf[:])
 	if err != nil {
 		return nil, err

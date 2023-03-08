@@ -9,7 +9,7 @@ import (
 )
 
 func TestParseRequest(t *testing.T) {
-	reqMsg, err := MakeReqMsg(Question{Name("example.com"), TypeA, ClassIN}, true, true)
+	reqMsg, err := MakeReqMsg(Question{Name("example.com"), TypeA, ClassIN}, true, true, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -137,6 +137,7 @@ func TestEncodeName(t *testing.T) {
 		}
 	}
 }
+
 func TestNameAncestors(t *testing.T) {
 	expected := []string{
 		"com.",
@@ -145,5 +146,25 @@ func TestNameAncestors(t *testing.T) {
 	actual := Name("www.example.com.").ancestors()
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("actual: %v", actual)
+	}
+}
+
+func TestNameParent(t *testing.T) {
+	data := [][]string{
+		{"", ""},
+		{"", "."},
+		{"", "com"},
+		{".", "com."},
+		{"com", "example.com"},
+		{"com.", "example.com."},
+		{"example.com", "www.example.com"},
+		{"example.com.", "www.example.com."},
+	}
+	for _, v := range data {
+		expected := Name(v[0])
+		actual := Name(v[1]).parent()
+		if expected != actual {
+			t.Errorf("v: %#v, expected: %#v, actual: %#v", v[1], expected, actual)
+		}
 	}
 }

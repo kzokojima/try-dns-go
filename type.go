@@ -27,6 +27,7 @@ const (
 	TypeRRSIG  Type = 46
 	TypeNSEC   Type = 47
 	TypeDNSKEY Type = 48
+	TypeNSEC3  Type = 50
 )
 
 var typeTexts = map[Type]string{
@@ -43,6 +44,7 @@ var typeTexts = map[Type]string{
 	TypeRRSIG:  "RRSIG",
 	TypeNSEC:   "NSEC",
 	TypeDNSKEY: "DNSKEY",
+	TypeNSEC3:  "NSEC3",
 }
 
 func typeFromString(s string) (Type, error) {
@@ -59,6 +61,10 @@ func (t Type) String() string {
 }
 
 type A netip.Addr
+
+func mustParseA(s string) A {
+	return A(netip.MustParseAddr(s))
+}
 
 func (a A) MarshalBinary(msg []byte) (data []byte, err error) {
 	return netip.Addr(a).AsSlice(), nil
@@ -214,18 +220,34 @@ func newDS(fields []string) (*DS, error) {
 	if err != nil {
 		return nil, err
 	}
+	v3 := strings.ReplaceAll(fields[3], " ", "")
+	v3b := make([]byte, len(v3)/2)
+	_, err = fmt.Sscanf(v3, "%X", &v3b)
+	if err != nil {
+		return nil, err
+	}
 	return &DS{
 		uint16(v0),
 		byte(v1),
 		byte(v2),
-		[]byte(fields[3]),
+		v3b,
 	}, nil
 }
 
+func mustParseDS(s string) DS {
+	ds, _ := newDS(strings.SplitN(s, " ", 4))
+	return *ds
+}
+
 func (ds DS) MarshalBinary(msg []byte) (data []byte, err error) {
-	// TODO
+	data = make([]byte, 4+len(ds.digest))
+	binary.BigEndian.PutUint16(data, ds.keyTag)
+	data[2] = ds.algo
+	data[3] = ds.digestType
+	copy(data[4:], ds.digest)
 	return
 }
+
 func (ds DS) String() string {
 	return fmt.Sprintf("%v %v %v %X", ds.keyTag, ds.algo, ds.digestType, ds.digest)
 }
@@ -273,7 +295,7 @@ func newRRSIG(fields []string) (*RRSIG, error) {
 	if err != nil {
 		return nil, err
 	}
-	v8, err := base64.StdEncoding.DecodeString(fields[8])
+	v8, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(fields[8], " ", ""))
 	if err != nil {
 		return nil, err
 	}
@@ -290,8 +312,17 @@ func newRRSIG(fields []string) (*RRSIG, error) {
 	}, nil
 }
 
+func mustParseRRSIG(s string) RRSIG {
+	rrsig, _ := newRRSIG(strings.SplitN(s, " ", 9))
+	return *rrsig
+}
+
 func (rrsig RRSIG) MarshalBinary(msg []byte) (data []byte, err error) {
-	// TODO
+	data, err = rrsig.MarshalBinaryWithoutSig()
+	if err != nil {
+		return
+	}
+	data = append(data, rrsig.Signature...)
 	return
 }
 
@@ -362,7 +393,7 @@ func newDNSKEY(fields []string) (*DNSKEY, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := base64.StdEncoding.DecodeString(fields[3])
+	key, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(fields[3], " ", ""))
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +403,11 @@ func newDNSKEY(fields []string) (*DNSKEY, error) {
 		byte(v2),
 		key,
 	}, nil
+}
+
+func mustParseDNSKEY(s string) DNSKEY {
+	dnskey, _ := newDNSKEY(strings.SplitN(s, " ", 4))
+	return *dnskey
 }
 
 func (dnskey DNSKEY) MarshalBinary(msg []byte) (data []byte, err error) {
@@ -384,7 +420,7 @@ func (dnskey DNSKEY) MarshalBinary(msg []byte) (data []byte, err error) {
 }
 
 func (dnskey DNSKEY) String() string {
-	return fmt.Sprintf("%v %v %v %v", dnskey.Flags, dnskey.Proto, dnskey.Algo, dnskey.Key)
+	return fmt.Sprintf("%v %v %v %v", dnskey.Flags, dnskey.Proto, dnskey.Algo, base64.StdEncoding.EncodeToString(dnskey.Key))
 }
 
 func (dnskey DNSKEY) Digest(name string) ([]byte, error) {

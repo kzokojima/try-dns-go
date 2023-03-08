@@ -84,7 +84,7 @@ test_authoritative_server() {
 test_resolver() {
     local CMD="dig @127.0.0.1 -p ${DNS_PORT}"
 
-    bin/serv -address=0.0.0.0:${DNS_PORT} -zone=root_files/named.root 2> /dev/null &
+    bin/serv -address=0.0.0.0:${DNS_PORT} -zone=root_files/named.root -root-anchors-xml root_files/root-anchors.xml 2> /dev/null &
 
     for each in test/resolver/*.sh ; do
         if source $each; then

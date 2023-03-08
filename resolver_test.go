@@ -7,14 +7,23 @@ import (
 	"testing"
 )
 
+func resolverTestSetUp(t *testing.T) {
+	err := SetUpResolver("root_files/named.root", "root_files/root-anchors.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootServer = "198.41.0.4"
+}
+
 func TestResolve(t *testing.T) {
+	resolverTestSetUp(t)
+
 	var rrs []ResourceRecord
 	var err error
-	rootServer = "198.41.0.4"
 
 	domains := []string{"example.com.", "www.example.com."}
 	for _, v := range domains {
-		rrs, err := Resolve(Question{Name(v), TypeA, ClassIN}, true, NewMockClient(), nil)
+		rrs, _, err := Resolve(Question{Name(v), TypeA, ClassIN}, true, false, NewMockClient(), nil)
 		if err != nil {
 			t.Errorf("%v %v", err, v)
 		}
@@ -23,12 +32,46 @@ func TestResolve(t *testing.T) {
 		}
 	}
 
-	rrs, err = Resolve(Question{Name("jprs.co.jp."), TypeA, ClassIN}, true, NewMockClient(), nil)
+	rrs, _, err = Resolve(Question{Name("jprs.co.jp."), TypeA, ClassIN}, true, false, NewMockClient(), nil)
 	if err != nil {
 		t.Errorf("%v %v", err, "jprs.co.jp.")
 	}
 	if err == nil && rrs[0].RData.String() != "117.104.133.165" {
 		t.Errorf("%v %v", rrs[0].RData.String(), "jprs.co.jp.")
+	}
+
+	rrs, _, err = Resolve(Question{Name("one.one.one.one."), TypeA, ClassIN}, true, false, nil, nil)
+	if err != nil {
+		t.Errorf("%v %v", err, "one.one.one.one.")
+	}
+	if err == nil && (rrs[0].RData.String() != "1.1.1.1" && rrs[0].RData.String() != "1.0.0.1") {
+		t.Errorf("%v %v", rrs[0].RData.String(), "one.one.one.one.")
+	}
+}
+
+func TestResolveDNSSec(t *testing.T) {
+	Log.SetLogLevel(LogLevelDebug)
+	defer Log.SetLogLevel(LogLevelInfo)
+	resolverTestSetUp(t)
+
+	domains := []string{"example.com.", "www.example.com."}
+	for _, v := range domains {
+		rrs, ad, err := Resolve(Question{Name(v), TypeA, ClassIN}, true, true, nil, nil)
+		if err != nil {
+			t.Errorf("%v %v", err, v)
+		} else if !ad {
+			t.Errorf("ad: false")
+		} else if err == nil && rrs[0].RData.String() != "93.184.216.34" {
+			t.Errorf("%v %v", rrs[0].RData.String(), v)
+		}
+	}
+
+	rrs, _, err := Resolve(Question{Name("one.one.one.one."), TypeA, ClassIN}, true, true, nil, nil)
+	if err != nil {
+		t.Errorf("%v %v", err, "one.one.one.one.")
+	}
+	if err == nil && (rrs[0].RData.String() != "1.1.1.1" && rrs[0].RData.String() != "1.0.0.1") {
+		t.Errorf("%v %v", rrs[0].RData.String(), "one.one.one.one.")
 	}
 }
 
@@ -181,7 +224,7 @@ func NewMockClient() *MockClient {
 	return mock
 }
 
-func (c *MockClient) Do(network string, address string, question Question, rec bool, edns bool) (*Response, error) {
+func (c *MockClient) Do(network string, address string, question Question, rec bool, edns bool, dnssec bool) (*Response, error) {
 	key := MockClientDataKey{address, question}
 	val, ok := c.data.Load(key)
 	if ok {

@@ -138,6 +138,9 @@ const (
 	TC       uint16 = 1 << 9
 	RD       uint16 = 1 << 8
 	RA       uint16 = 1 << 7
+	Z        uint16 = 1 << 6
+	AD       uint16 = 1 << 5
+	CD       uint16 = 1 << 4
 	NOERROR  uint16 = 0
 	FORMERR  uint16 = 1
 	SERVFAIL uint16 = 2
@@ -162,22 +165,23 @@ const (
 type Name string
 
 func (n Name) ancestors() []string {
-	var names []string
-	labels := n.labels()
-	for i := len(labels) - 1; 0 < i; i-- {
-		name := labels[i]
-		if 0 < len(names) {
-			name = name + "." + names[len(names)-1]
-		} else {
-			name = name + "."
-		}
-		names = append(names, name)
+	parent := n.parent()
+	if parent == "." {
+		return nil
 	}
+	names := parent.ancestors()
+	names = append(names, parent.String())
 	return names
 }
 
-func (n Name) labels() []string {
-	return strings.Split(strings.TrimRight(string(n), "."), ".")
+func (n Name) parent() Name {
+	s := strings.SplitN(string(n), ".", 2)
+	if s[0] == "" || len(s) == 1 {
+		return ""
+	} else if s[1] == "" {
+		return "."
+	}
+	return Name(s[1])
 }
 
 func (n Name) MarshalBinary(msg []byte) (data []byte, err error) {
@@ -579,15 +583,11 @@ func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
 	binary.BigEndian.PutUint16(bytes[l+2:], uint16(rr.Class))
 	binary.BigEndian.PutUint32(bytes[l+4:], uint32(rr.TTL))
 	var rdata []byte
-	switch rr.Type {
-	case TypeA, TypeNS, TypeCNAME, TypeSOA, TypeMX, TypeTXT, TypeAAAA, TypeDNSKEY:
+	if rr.Type != TypeOPT {
 		rdata, err = rr.RData.MarshalBinary(msg)
 		if err != nil {
 			return nil, err
 		}
-	case TypeOPT:
-	default:
-		return nil, fmt.Errorf("type: %v", rr.Type)
 	}
 	binary.BigEndian.PutUint16(bytes[l+8:], uint16(len(rdata)))
 	bytes = append(bytes, rdata...)
@@ -595,7 +595,15 @@ func (rr ResourceRecord) Bytes(msg []byte) ([]byte, error) {
 }
 
 func (rr ResourceRecord) String() string {
-	return fmt.Sprintf("%v %v %v %v %v", rr.Name, rr.TTL, rr.Class, rr.Type, rr.RData.String())
+	if rr.Type == TypeOPT {
+		flags := ""
+		if ((rr.TTL >> 15) & 1) == 1 {
+			flags = " do"
+		}
+		return fmt.Sprintf("EDNS: version: %v, flags:%v; udp: %v\n", (rr.TTL>>16)&0xf, flags, int(rr.Class))
+	} else {
+		return fmt.Sprintf("%v %v %v %v %v", rr.Name, rr.TTL, rr.Class, rr.Type, rr.RData.String())
+	}
 }
 
 type Response struct {
@@ -682,7 +690,7 @@ func (res *Response) Bytes() ([]byte, error) {
 	return bytes, nil
 }
 
-const udpSize = 1500
+const UDPSize = 1500
 
 type Request struct {
 	Header                    Header
@@ -691,7 +699,7 @@ type Request struct {
 	MsgSize                   int
 }
 
-func MakeReqMsg(question Question, rd bool, edns bool) ([]byte, error) {
+func MakeReqMsg(question Question, rd bool, edns bool, dnssec bool) ([]byte, error) {
 	questionBytes, err := question.Bytes()
 	if err != nil {
 		return nil, err
@@ -701,10 +709,15 @@ func MakeReqMsg(question Question, rd bool, edns bool) ([]byte, error) {
 	var arcount uint16
 	var arbytes []byte
 	if edns {
+		ttl := 0
+		if dnssec {
+			ttl = 1 << 15 // DO bit
+		}
 		arcount = 1
 		opt := ResourceRecord{
 			Type:  TypeOPT,
-			Class: udpSize, // UDP payload size
+			Class: UDPSize, // UDP payload size
+			TTL:   TTL(ttl),
 		}
 		bytes, err := opt.Bytes(nil)
 		if err != nil {

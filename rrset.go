@@ -1,5 +1,9 @@
 package dns
 
+import (
+	"strings"
+)
+
 type RRSet struct {
 	Name
 	Type
@@ -14,6 +18,14 @@ func (rrSet *RRSet) ResourceRecords() []ResourceRecord {
 		rrs = append(rrs, ResourceRecord{rrSet.Name, rrSet.Type, rrSet.Class, rrSet.TTL, v})
 	}
 	return rrs
+}
+
+func (rrSet *RRSet) String() string {
+	var result []string
+	for _, rr := range rrSet.ResourceRecords() {
+		result = append(result, rr.String())
+	}
+	return strings.Join(result, "\n") + "\n"
 }
 
 type RRSets map[Question]*RRSet
@@ -37,4 +49,12 @@ func NewRRSets(rrs []ResourceRecord) RRSets {
 		rrSet.RDatas = append(rrSet.RDatas, v.RData)
 	}
 	return rrSets
+}
+
+func (rrSets *RRSets) String() string {
+	var result []string
+	for _, rrSets := range *rrSets {
+		result = append(result, rrSets.String())
+	}
+	return strings.Join(result, "")
 }

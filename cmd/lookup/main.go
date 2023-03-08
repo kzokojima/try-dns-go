@@ -142,12 +142,8 @@ func print(res *dns.Response, opts *opts) {
 		fmt.Println()
 
 		if opt != nil {
-			flags := ""
-			if ((opt.TTL >> 15) & 1) == 1 {
-				flags = " do"
-			}
 			fmt.Println(";; OPT PSEUDOSECTION:")
-			fmt.Printf("; EDNS: version: %v, flags:%v; udp: %v\n", (opt.TTL>>16)&0xf, flags, int(opt.Class))
+			fmt.Printf("; %v\n", opt.String())
 		}
 
 		fmt.Println(";; QUESTION SECTION:")
@@ -228,7 +224,7 @@ func main() {
 	if err != nil {
 		die(err)
 	}
-	res, err := client.Do(network, opts.server+":"+opts.port, question, opts.rec, true)
+	res, err := client.Do(network, opts.server+":"+opts.port, question, opts.rec, true, false)
 	if err != nil {
 		if res != nil {
 			printBytes(res.RawMsg)

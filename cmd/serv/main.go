@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"try/dns"
 )
@@ -47,8 +48,9 @@ func getAdditionals(answers []dns.ResourceRecord) []dns.ResourceRecord {
 	return append(results1, results2...)
 }
 
-type ServFunc func(dns.Request) (*dns.Response, error)
+type RequestHandler func(dns.Request) (*dns.Response, error)
 
+// authoritativeServer is RequestHandler for authoritative server.
 func authoritativeServer(req dns.Request) (*dns.Response, error) {
 	var answers, additionals []dns.ResourceRecord
 
@@ -75,6 +77,7 @@ func authoritativeServer(req dns.Request) (*dns.Response, error) {
 
 var cache = dns.NewCache()
 
+// resolver is RequestHandler for full-service resolver.
 func resolver(req dns.Request) (*dns.Response, error) {
 	if req.Question.Name == "." && req.Question.Type == dns.TypeNS {
 		// root
@@ -85,18 +88,50 @@ func resolver(req dns.Request) (*dns.Response, error) {
 			req.Question, answers, zoneAuthorities, additionals)
 	}
 
-	rrs, err := dns.Resolve(req.Question, true, nil, cache)
+	dnssec := true
+	rrs, ad, err := dns.Resolve(req.Question, true, dnssec, nil, cache)
 	if err != nil {
 		return dns.MakeResponse(req.Header.ID,
 			dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.RD, dns.RA, dns.NXDOMAIN),
 			req.Question, nil, nil, nil)
 	}
+	sort.Slice(rrs, func(i, j int) bool {
+		return rrs[i].RData.String() < rrs[j].RData.String()
+	})
+	vals := dns.QR | dns.RD | dns.RA | dns.NOERROR
+	if ad {
+		// DNSSEC verification succeeded
+		vals |= dns.AD
+	}
+	var additionals []dns.ResourceRecord
+	var do bool
+	if len(req.AdditionalResourceRecords) != 0 {
+		rr := req.AdditionalResourceRecords[0]
+		if rr.Type == dns.TypeOPT {
+			var ttl uint32
+			ttl |= uint32(rr.TTL) & (1 << 15) // copy DO bit
+			do = 0 < ttl
+			opt := dns.ResourceRecord{
+				Type:  dns.TypeOPT,
+				Class: dns.UDPSize, // UDP payload size
+				TTL:   dns.TTL(ttl),
+			}
+			additionals = append(additionals, opt)
+		}
+	}
+	if !do {
+		for i, v := range rrs {
+			if req.Question.Type != dns.TypeRRSIG && v.Type == dns.TypeRRSIG {
+				rrs = rrs[:i+copy(rrs[i:], rrs[i+1:])]
+			}
+		}
+	}
 	return dns.MakeResponse(req.Header.ID,
-		dns.MakeHeaderFields(req.Header.Opcode(), dns.QR, dns.RD, dns.RA, dns.NOERROR),
-		req.Question, rrs, nil, nil)
+		dns.MakeHeaderFields(req.Header.Opcode(), vals),
+		req.Question, rrs, nil, additionals)
 }
 
-func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFunc) {
+func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, requestHandler RequestHandler) {
 	var (
 		bytes    []byte
 		err      error
@@ -110,7 +145,7 @@ func handleConnection(conn net.PacketConn, addr net.Addr, req []byte, fn ServFun
 		return
 	}
 
-	response, err = fn(*request)
+	response, err = requestHandler(*request)
 	if err != nil {
 		dns.Log.Error(err)
 		return
@@ -132,10 +167,12 @@ func main() {
 	var mode string
 	var address string
 	var zone string
+	var rootAnchorsXML string
 
 	flag.StringVar(&address, "address", "", "")
 	flag.StringVar(&mode, "mode", "", "")
 	flag.StringVar(&zone, "zone", "", "")
+	flag.StringVar(&rootAnchorsXML, "root-anchors-xml", "", "")
 	flag.Parse()
 
 	conn, err := net.ListenPacket("udp", address)
@@ -144,12 +181,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	fn := resolver
+	requestHandler := resolver
 	if mode == "authoritative" {
 		loadZonefiles(zone)
-		fn = authoritativeServer
+		requestHandler = authoritativeServer
 	} else {
-		dns.LoadRootZone(zone)
+		dns.SetUpResolver(zone, rootAnchorsXML)
 	}
 
 	for {
@@ -159,6 +196,6 @@ func main() {
 			dns.Log.Error(err)
 			continue
 		}
-		go handleConnection(conn, addr, buf[:n], fn)
+		go handleConnection(conn, addr, buf[:n], requestHandler)
 	}
 }

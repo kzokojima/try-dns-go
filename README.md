@@ -37,6 +37,8 @@ $ bin/lookup -x 2606:4700:4700::1111
     * Set the server mode. The default mode is full-service resolver. Sets the "authoritative" is authoritative server.
 * -zone=\<zone file\>
     * Set the zone file. If mode is full-service resolver, specify root hints file ([IANA Root Files](https://www.iana.org/domains/root/files)).
+* -root-anchors-xml=\<root-anchors-xml file\>
+    * Set the root-anchors-xml file. If mode is full-service resolver, specify root trust anchor file ([IANA Root Files](https://www.iana.org/domains/root/files)).
 
 #### Authoritative server
 
@@ -55,7 +57,7 @@ $ pkill -f 0.0.0.0:8053
 
 ```
 # start server
-$ bin/serv -address=0.0.0.0:8053 -zone=root_files/named.root &
+$ bin/serv -address=0.0.0.0:8053 -zone=root_files/named.root -root-anchors-xml root_files/root-anchors.xml &
 
 # lookup
 $ dig @127.0.0.1 -p 8053 example.com
